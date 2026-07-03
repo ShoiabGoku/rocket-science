@@ -13,12 +13,15 @@ A single-file, zero-dependency web simulator of a rocket **ascending from** or *
 |---|---|
 | **▲ ASCENT** | Ignition on the pad → Max-Q → MECO → apogee. If the rocket isn't fast enough to escape, it falls back and re-enters — the full flight is simulated, including the return heating. |
 | **▼ DESCENT / RE-ENTRY** | Released nose-first at your chosen entry altitude and speed. Ride the plasma, then land under **parachutes**, a **retro-propulsive burn**, or both. Touch down under 10 m/s for a soft landing. |
+| **◉ TO ORBIT** | Full 2-D flight around the planet: automatic gravity turn with a vertical-rate hold, MECO at target apoapsis, coast, circularization burn at apoapsis — then you're in a real orbit (live apoapsis/periapsis, orbit map inset, downrange). Flip to **RETRO**, throttle up to deorbit, survive the 7.8 km/s re-entry, and land under canopy. A complete orbital mission, end to end. |
 
 ## What you can configure
 
 - **Planet & gravity** — surface gravity g₀, planet radius (gravity falls off as inverse-square with altitude), or pick a preset: **Earth, Moon, Mars, Venus, Titan**
 - **Atmosphere** — how far it extends (the air genuinely ends at your chosen edge), surface pressure & temperature, lapse rate, specific gas constant R, heat-capacity ratio γ
 - **Rocket** — dry mass, propellant mass, max thrust, body diameter, live throttle
+- **Staging** — optional second stage with its own dry mass, propellant, thrust and fuel; booster burnout → jettison → stage-2 ignition sequence, with a live Tsiolkovsky ideal-Δv readout per stage
+- **Orbit guidance** — pitch-over altitude, gravity-turn end altitude, target orbit altitude, auto-circularize on/off, prograde/retro burn direction
 - **Propellant** (sets sea-level & vacuum specific impulse):
   RP-1/LOX · LH₂/LOX · CH₄/LOX · N₂O₄/UDMH · APCP solid
 - **Nose shape** (sets the Mach-dependent drag curve *and* the stagnation-point radius):
@@ -42,6 +45,7 @@ Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat fl
 | Ablation | PICA holds ~2900 K while sacrificing ablator mass (q̇/h_abl); run out and the bare substrate fails fast |
 | Propulsion | Effective Isp blends vacuum ↔ sea-level values with ambient pressure; propellant drains at ṁ = F/(Isp·g₀); MECO when dry |
 | Parachutes | Drogue (C_d 0.9) and ringsail main (C_d 1.75) with timed inflation ramps that limit opening shock; deployment gated by Mach and dynamic pressure like real recovery sequencers |
+| Orbit mode | 2-D equations of motion in polar coordinates around the planet centre (central gravity μ/r², centrifugal and Coriolis terms); drag and heating use the full velocity vector; osculating elements (apoapsis/periapsis) from energy and angular momentum |
 | Escape | Flags an escape trajectory when specific orbital energy v²/2 − μ/(R+h) ≥ 0 outside the atmosphere |
 | Integration | Semi-implicit Euler at 100 Hz with time-warp 0.5×–50×; physics on a wall-clock timer so background tabs don't freeze the flight |
 
@@ -56,6 +60,8 @@ The scene is rendered live on canvas: re-entry bow shock with a shape-dependent 
 1. **Why capsules are blunt** — re-enter at 3 km/s with a *conical* aluminium nose (vehicle lost in seconds), then switch to *spherical* + PICA and watch peak heat flux drop by an order of magnitude.
 2. **Suicide burn** — descent mode, 4 m blunt body, ~2 t of propellant: coast through entry heating, then throttle up below ~3 km and try to touch down under 10 m/s.
 3. **Capsule recovery** — 4 m spherical nose + PICA, no propellant at all: entry at 3 km/s → drogue at ~16 km → main at 2.5 km → 7.5 m/s splat-free touchdown, exactly like a real capsule sequence.
+4. **The full orbital mission** — TO ORBIT mode, two-stage on, spherical PICA nose: gravity turn → staging → 200 km orbit in ~19 min. Coast a while, flip RETRO, throttle up for ~10 s, and ride the plasma home to a parachute landing ~100 minutes after liftoff.
+5. **Why orbit is hard** — try the same mission with staging off, or with an aluminium nose, or with the gravity turn ending at 65 km instead of 110. Each fails a different way: not enough Δv, a melted nose, or drag losses eating the margin.
 3. **Moon hop** — Moon preset: no drag, no Max-Q, no heating, and a TWR of 12 on the same rocket. Escape velocity comes embarrassingly quickly.
 4. **Venus is hell** — 92 bar and 737 K at the surface. Watch what the atmosphere does to your ascent.
 5. **Throttle discipline** — full throttle from the pad melts an aluminium nose in the dense lower atmosphere; real rockets throttle down through Max-Q for a reason.

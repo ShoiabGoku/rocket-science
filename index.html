@@ -56,6 +56,10 @@ details .body{padding:2px 10px 10px}
 .selrow select{width:100%}
 .chk{display:flex;gap:7px;align-items:center;font-size:11px;color:var(--txt);margin-bottom:8px;cursor:pointer}
 .chk input{accent-color:var(--cyan)}
+#burnDirRow{display:none;gap:6px;margin-top:7px}
+.bdir{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--dim);
+  font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:5px 0;border-radius:5px;cursor:pointer}
+.bdir.active{color:var(--cyan);border-color:var(--cyan)}
 .note{font-size:10px;color:var(--dim);line-height:1.5;margin-top:4px}
 .note b{color:var(--txt);font-weight:normal}
 .ro-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
@@ -105,6 +109,7 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
   <div class="tabs">
     <button id="tabAscent" class="active">▲ ASCENT</button>
     <button id="tabDescent">▼ DESCENT / RE-ENTRY</button>
+    <button id="tabOrbit">◉ TO ORBIT</button>
   </div>
   <div class="runbox">
     <select id="warp" title="Time warp">
@@ -122,6 +127,10 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
     <div id="throttleBox">
       <label>THROTTLE <span id="throttleVal">100%</span></label>
       <input type="range" id="throttle" min="0" max="100" step="1" value="100">
+      <div id="burnDirRow">
+        <button id="btnPro" class="bdir active">PROGRADE</button>
+        <button id="btnRetro" class="bdir">RETRO</button>
+      </div>
       <div class="kbd"><b>↑</b>/<b>↓</b> throttle · <b>Space</b> pause · <b>R</b> reset</div>
     </div>
 
@@ -156,6 +165,15 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
       <div id="grp-stage2"></div>
       <div class="selrow"><label>Stage 2 propellant</label><select id="fuel2"></select></div>
       <div class="note" id="dvNote"></div>
+    </div></details>
+
+    <details open id="orbitBox" style="display:none"><summary>ORBIT GUIDANCE</summary><div class="body">
+      <label class="chk"><input type="checkbox" id="autoCirc" checked> Auto-circularize at apoapsis</label>
+      <div id="grp-orbit"></div>
+      <div class="note">Gravity turn: vertical to pitch-over altitude, then pitch eases from 90°
+        to horizontal by turn-end altitude. MECO once apoapsis reaches target, coast, then a
+        prograde burn at apoapsis circularizes. Going orbital is HOT — pick a titanium,
+        carbon or PICA nose. After orbit: RETRO + throttle to deorbit and come home.</div>
     </div></details>
 
     <details open><summary>NOSE &amp; THERMAL PROTECTION</summary><div class="body">
@@ -199,6 +217,8 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
       <div class="ro"><div class="l">DYN PRESSURE q</div><div class="v" id="roQ">0 kPa</div></div>
       <div class="ro"><div class="l">EFFECTIVE Isp</div><div class="v" id="roIsp">—</div></div>
       <div class="ro"><div class="l">APOGEE</div><div class="v" id="roApo">—</div></div>
+      <div class="ro"><div class="l">APOAPSIS</div><div class="v" id="roApoapsis">—</div></div>
+      <div class="ro"><div class="l">PERIAPSIS</div><div class="v" id="roPeriapsis">—</div></div>
       <div class="ro"><div class="l">AIR DENSITY</div><div class="v" id="roRho">1.225 kg/m³</div></div>
       <div class="ro"><div class="l">AIR PRESSURE</div><div class="v" id="roPair">101.3 kPa</div></div>
       <div class="ro"><div class="l">AIR TEMP</div><div class="v" id="roTair">288 K</div></div>
@@ -301,8 +321,11 @@ const PARAM_DEFS = [
   {id:"entryalt",g:"entry",  label:"Entry altitude",     unit:"km",     min:1,   max:2000,  step:1,    val:120},
   {id:"entryvel",g:"entry",  label:"Entry speed (down)", unit:"m/s",    min:0,   max:12000, step:50,   val:3000},
   {id:"s2drymass", g:"stage2",label:"S2 dry mass",       unit:"t",      min:0.05,max:100,   step:0.05, val:0.8},
-  {id:"s2propmass",g:"stage2",label:"S2 propellant",     unit:"t",      min:0,   max:300,   step:0.1,  val:2.5},
+  {id:"s2propmass",g:"stage2",label:"S2 propellant",     unit:"t",      min:0,   max:300,   step:0.1,  val:4.5},
   {id:"s2thrust",  g:"stage2",label:"S2 thrust",         unit:"kN",     min:0,   max:5000,  step:5,    val:60},
+  {id:"pitchalt", g:"orbit",  label:"Pitch-over altitude",unit:"km",    min:0.2, max:20,    step:0.1,  val:1.5},
+  {id:"turnend",  g:"orbit",  label:"Gravity-turn end",  unit:"km",     min:10,  max:300,   step:1,    val:110},
+  {id:"targetalt",g:"orbit",  label:"Target orbit altitude",unit:"km",  min:80,  max:2000,  step:10,   val:200},
   {id:"chutedrogue",g:"chute",label:"Drogue chute area", unit:"m²",     min:0,   max:60,    step:1,    val:8},
   {id:"chutemain",g:"chute", label:"Main chute area",    unit:"m²",     min:0,   max:2000,  step:10,   val:400},
   {id:"chutealt", g:"chute", label:"Main deploy altitude",unit:"km",    min:0.2, max:30,    step:0.1,  val:2.5},
@@ -462,14 +485,18 @@ const DT = 0.01;
 
 function initState(){
   const mat = MATERIALS[$("material").value];
-  const h0 = mode === "ascent" ? 0 : P.entryalt * 1000;
+  const h0 = mode === "descent" ? P.entryalt * 1000 : 0;
   const atm0 = atmoAt(h0);
   S = {
     t:0, h:h0,
-    v: mode === "ascent" ? 0 : -P.entryvel,
+    v: mode === "descent" ? -P.entryvel : 0,
     prop: P.propmass * 1000,
     stage:1, prop2: P.s2propmass * 1000, sepStarted:false, sepAt:0, ign2:false,
-    Tn: Math.max(atm0.T, mode === "ascent" ? P.t0 : 220),
+    th:0, vt:0, speed: mode === "descent" ? P.entryvel : 0,
+    ang: mode === "descent" ? Math.PI : 0,
+    ophase:"ascent", pitchLogged:false, deorbited:false, ra:0, rp:0,
+    trail:[], lastTrail:-9, trailDt:2,
+    Tn: Math.max(atm0.T, mode === "descent" ? 220 : P.t0),
     abl: mat.ablative ? mat.ablStock : 0, ablDead:false,
     maxH:h0, maxQ:0, maxQd:0, qNow:0, qdNow:0, mach:0,
     thrustNow:0, dragNow:0, accFelt:0, ispNow:0, gNow:localG(h0),
@@ -488,6 +515,7 @@ function initState(){
 function localG(h){ const Rm = P.radius*1000; return P.g0 * (Rm/(Rm+h))**2; }
 
 function physicsStep(dt){
+  if (mode === "orbit"){ physicsStepOrbit(dt); return; }
   if (S.done) return;
   const mat  = MATERIALS[$("material").value];
   const fuel = FUELS[$("fuel").value];
@@ -666,6 +694,273 @@ function physicsStep(dt){
   S.TnPeak = Math.max(S.TnPeak||0, S.Tn);
 }
 
+/* ================= ORBIT MODE PHYSICS =================
+   2-D dynamics in polar coordinates around the planet centre.
+   S.v = radial velocity, S.vt = tangential velocity, S.th = downrange angle. */
+function physicsStepOrbit(dt){
+  if (S.done) return;
+  const mat  = MATERIALS[$("material").value];
+  const nose = NOSES[$("nose").value];
+  const atm  = atmoAt(S.h);
+  const Rm   = P.radius*1000, mu = P.g0*Rm*Rm;
+  const r    = Rm + S.h;
+  const g    = mu/(r*r);
+  const area = Math.PI*(P.dia/2)**2;
+  const throttle = +$("throttle").value/100;
+
+  // --- staging/propulsion (same sequencing as 1-D modes)
+  const st2on = $("stagingOn").checked;
+  if (st2on && S.stage === 1 && S.prop <= 0 && !S.sepStarted){
+    S.sepStarted = true; S.sepAt = S.t; log("MECO — booster burnout", "warn");
+  }
+  if (S.sepStarted && S.stage === 1 && S.t >= S.sepAt + 0.7){
+    S.stage = 2; spawnBooster(); log("STAGE SEPARATION — booster jettisoned", "good");
+  }
+  const sepCoast = S.sepStarted && S.t < S.sepAt + 1.4;
+  const stageFuel = S.stage === 2 ? FUELS[$("fuel2").value] : FUELS[$("fuel").value];
+  const stageMax = (S.stage === 2 ? P.s2thrust : P.thrust)*1000;
+  const propNow = S.stage === 2 ? S.prop2 : S.prop;
+  let thrust = 0; S.ispNow = 0;
+  if (propNow > 0 && throttle > 0 && stageMax > 0 && !sepCoast){
+    if (S.stage === 2 && !S.ign2){ S.ign2 = true; log("STAGE 2 IGNITION", "good"); }
+    const ispEff = stageFuel.ispVac - (stageFuel.ispVac - stageFuel.ispSL)*Math.min(atm.P/101325,1);
+    thrust = throttle*stageMax;
+    const mdot = thrust/(ispEff*G_STD);
+    let burn = mdot*dt;
+    if (burn > propNow){ thrust *= propNow/burn; burn = propNow; }
+    if (S.stage === 2) S.prop2 -= burn; else S.prop -= burn;
+    S.ispNow = ispEff;
+    const left = S.stage === 2 ? S.prop2 : S.prop;
+    if (left <= 0 && !S.meco && !(st2on && S.stage === 1)){
+      S.meco = true;
+      log(S.stage === 2 ? "SECO — second stage cutoff" : "MECO — propellant depleted", "warn");
+    }
+  }
+  const m = S.stage === 2 ? P.s2drymass*1000 + S.prop2
+          : P.drymass*1000 + S.prop + (st2on ? P.s2drymass*1000 + S.prop2 : 0);
+
+  // --- guidance: prescribed gravity turn, then prograde/retro burns
+  const spd0 = Math.hypot(S.v, S.vt);
+  let dR, dT;
+  if (S.ophase === "ascent"){
+    const p0 = P.pitchalt*1000, p1 = Math.max(P.turnend*1000, p0+1000);
+    let pitch = 90;
+    if (S.h >= p0){
+      const u = Math.min(1, (S.h - p0)/(p1 - p0));
+      pitch = 90*Math.pow(1 - u, 0.85);   // lofted: stays steep low, flattens out high
+      if (!S.pitchLogged){ S.pitchLogged = true; log(`PITCH-OVER — gravity turn begins at ${fmtAlt(S.h)}`); }
+      // crude closed-loop vertical-rate hold: don't let the stage sink before orbit
+      if (S.v < 120 && S.h < P.targetalt*1000*0.9)
+        pitch = Math.max(pitch, Math.min(35, (120 - S.v)*0.15));
+    }
+    const pr = pitch*Math.PI/180;
+    dR = Math.sin(pr); dT = Math.cos(pr);
+  } else if (spd0 > 1e-6){
+    dR = S.v/spd0*burnDir; dT = S.vt/spd0*burnDir;
+  } else { dR = 1; dT = 0; }
+  if (thrust > 0 && burnDir < 0 && S.ophase === "orbit" && !S.deorbited){
+    S.deorbited = true; log("DEORBIT BURN — retrograde", "warn");
+  }
+
+  // --- aerodynamics: drag (and chutes) act along −velocity
+  S.mach = atm.rho > 0 ? spd0/soundSpeed(atm.T) : 0;
+  const qDyn = 0.5*atm.rho*spd0*spd0;
+  let chuteCdA = 0;
+  if ($("chutesOn").checked && S.v < 0 && atm.rho > 1e-4){
+    if (S.chute === "stowed" && S.mach < 1.6 && qDyn < 40000 && P.chutedrogue > 0){
+      S.chute = "drogue"; S.drogueT = S.t;
+      log(`DROGUE DEPLOY — ${spd0.toFixed(0)} m/s at ${fmtAlt(S.h)}`, "good");
+    }
+    if (S.chute === "drogue" && S.h < P.chutealt*1000 && spd0 < 150 && P.chutemain > 0){
+      S.chute = "main"; S.mainT = S.t; log(`MAIN CHUTE DEPLOY at ${fmtAlt(S.h)}`, "good");
+    }
+  }
+  if (S.chute === "drogue" || S.chute === "main"){
+    S.drogueFrac = Math.min(1, (S.t - S.drogueT)/1.2);
+    if (S.chute === "main"){
+      const was = S.mainFrac;
+      S.mainFrac = Math.min(1, (S.t - S.mainT)/2.5);
+      if (was < 1 && S.mainFrac >= 1) log(`MAIN FULL OPEN — sink rate ${Math.abs(S.v).toFixed(1)} m/s`);
+    }
+    chuteCdA = 0.9*P.chutedrogue*S.drogueFrac + 1.75*P.chutemain*S.mainFrac;
+  }
+  const Cd = dragCoeff(nose, S.mach);
+  const Faero = qDyn*(Cd*area + chuteCdA);
+  const uR = spd0 > 1e-6 ? S.v/spd0 : 0, uT = spd0 > 1e-6 ? S.vt/spd0 : 0;
+
+  // --- integrate polar equations of motion (semi-implicit)
+  const aR = -mu/(r*r) + S.vt*S.vt/r + (thrust*dR - Faero*uR)/m;
+  const aT = -(S.v*S.vt)/r + (thrust*dT - Faero*uT)/m;
+  S.v  += aR*dt;
+  S.vt += aT*dt;
+  S.h  += S.v*dt;
+  S.th += S.vt/(Rm + Math.max(S.h,0))*dt;
+  S.t  += dt;
+  S.speed = Math.hypot(S.v, S.vt);
+  S.thrustNow = thrust; S.dragNow = Faero;
+  S.accFelt = Math.hypot(thrust*dR - Faero*uR, thrust*dT - Faero*uT)/m/G_STD;
+  S.qNow = qDyn; S.gNow = g; S.atm = atm;
+  if (qDyn > S.maxQ) S.maxQ = qDyn;
+  if (S.h > S.maxH) S.maxH = S.h;
+  if (!S.qWarned && qDyn > 80000){
+    S.qWarned = true; log(`⚠ AIRFRAME STRESS — q ${(qDyn/1000).toFixed(0)} kPa`, "warn");
+  }
+
+  // --- sprite attitude: along thrust in the turn, else prograde (retro burns flip it)
+  let angT;
+  if (S.mainFrac > 0.4) angT = 0;
+  else if (S.ophase === "ascent" && thrust > 0) angT = Math.atan2(dT, dR);
+  else if (S.speed > 2) angT = Math.atan2(S.vt*burnDir, S.v*burnDir);
+  else angT = S.ang;
+  let dA = angT - S.ang;
+  while (dA >  Math.PI) dA -= 2*Math.PI;
+  while (dA < -Math.PI) dA += 2*Math.PI;
+  S.ang += dA*Math.min(1, 2.5*dt);
+
+  // --- osculating orbital elements (semi-major-axis form: stable even for near-radial orbits)
+  const eps = S.speed*S.speed/2 - mu/r;
+  const hAng = r*S.vt;
+  const ecc = Math.sqrt(Math.max(0, 1 + 2*eps*hAng*hAng/(mu*mu)));
+  if (eps < 0){
+    const sma = -mu/(2*eps);
+    S.ra = sma*(1 + ecc);
+    S.rp = sma*(1 - ecc);
+  } else {
+    S.ra = Infinity;
+    S.rp = (hAng*hAng/mu)/(1 + ecc);
+  }
+
+  // --- ascent phase machine
+  const tgtR = Rm + P.targetalt*1000;
+  if (S.ophase === "ascent" && S.ra >= tgtR && S.vt > 1000 && S.h > P.pitchalt*1000 + 5000){
+    S.ophase = "coast"; forceThrottle(0);
+    log(`MECO — apoapsis ${((S.ra-Rm)/1000).toFixed(0)} km reached, coasting`, "good");
+  }
+  if (S.ophase === "ascent" && S.meco && S.v < 0 && S.prop <= 0 && S.prop2 <= 0){
+    S.ophase = "ballistic";
+    log("FAILED TO ORBIT — ballistic trajectory, prepare for entry", "warn");
+  }
+  if (S.ophase === "coast"){
+    if ($("autoCirc").checked && isFinite(S.ra) && S.vt > 1000
+        && S.ra > Rm + P.targetalt*1000*0.6
+        && Math.abs(S.v) < 200
+        && (S.ra - r) < Math.max(3000, 0.005*(S.ra - Rm))){
+      S.ophase = "circ"; forceThrottle(100);
+      log("CIRCULARIZATION BURN — prograde at apoapsis", "good");
+    } else if (S.rp >= Rm + P.targetalt*1000*0.9){
+      S.ophase = "orbit";                      // user circularized manually
+      orbitAchieved();
+    } else if (S.v < 0 && S.h < (ATMO.Hm || 1e5)*0.7){
+      S.ophase = "ballistic";
+      log("FALLING SHORT — periapsis inside the planet, ballistic re-entry", "warn");
+    }
+  }
+  if (S.ophase === "circ"){
+    if (S.rp >= Rm + P.targetalt*1000*0.9){
+      S.ophase = "orbit"; forceThrottle(0);
+      orbitAchieved();
+    } else if (S.prop <= 0 && S.prop2 <= 0){
+      S.ophase = "orbit";
+      log(`PROPELLANT EXHAUSTED — periapsis ${((S.rp-Rm)/1000).toFixed(0)} km`, "warn");
+      if (S.rp < Rm + (ATMO.Hm||0)) log("Periapsis inside the atmosphere — orbit will decay", "warn");
+    }
+  }
+
+  // --- stagnation heating (same model, total-speed based)
+  const rn = noseRadius(nose);
+  const qdot = atm.rho > 0 ? SG_K*Math.sqrt(atm.rho/rn)*S.speed**3 : 0;
+  S.qdNow = qdot;
+  if (qdot > S.maxQd) S.maxQd = qdot;
+  if (!S.blackout && qdot > 1.2e6){
+    S.blackout = true; log("PLASMA BLACKOUT — ionised sheath, telemetry lost", "warn");
+  } else if (S.blackout && qdot < 6e5){
+    S.blackout = false; log("Comms reacquired — blackout ended");
+  }
+  const cool = mat.eps*SB*(S.Tn**4 - Math.max(atm.T,3)**4);
+  const conv = atm.rho > 0 ? (10 + 0.3*Math.sqrt(atm.rho)*S.speed)*(atm.T - S.Tn) : 0;
+  const net = qdot + conv - cool;
+  const heatCap = mat.rho*mat.cp*SKIN;
+  if (mat.ablative && !S.ablDead && S.Tn >= T_ABL && net > 0){
+    S.abl -= net*dt/mat.hAbl; S.Tn = T_ABL;
+    if (S.abl <= 0){ S.ablDead = true; log("ABLATOR DEPLETED — bare substrate exposed", "bad"); }
+  } else {
+    S.Tn += net*dt/heatCap;
+    if (S.Tn < 3) S.Tn = 3;
+  }
+  const tLimit = S.ablDead ? 1100 : mat.maxT;
+  if (S.Tn > tLimit && !S.failed){
+    S.failed = true; S.done = true;
+    spawnExplosion(0.8);
+    log(`NOSE STRUCTURAL FAILURE at ${Math.round(S.Tn)} K (limit ${tLimit} K)`, "bad");
+    banner("bad", "⚠ VEHICLE LOST ⚠", `burned up at ${(S.h/1000).toFixed(1)} km · ${S.speed.toFixed(0)} m/s`);
+    stopRun(); return;
+  }
+  S.TnPeak = Math.max(S.TnPeak||0, S.Tn);
+
+  // --- shared events
+  if (!S.lifted){
+    if (S.h > 0.5){ S.lifted = true; log("LIFTOFF", "good"); }
+    else if (S.v < 0){ S.v = 0; S.h = 0; }
+  }
+  if (!ATMO.vac){
+    if (S.v > 0 && !S.exitLogged && S.h > ATMO.Hm){
+      S.exitLogged = true; S.entryLogged = false;
+      log(`ATMOSPHERE DEPARTED at ${(ATMO.Hm/1000).toFixed(0)} km — vacuum flight`);
+    }
+    if (S.v < 0 && !S.entryLogged && S.h < ATMO.Hm){
+      S.entryLogged = true; S.exitLogged = false;
+      log(`ENTRY INTERFACE — ${S.speed.toFixed(0)} m/s at ${(S.h/1000).toFixed(1)} km`, "warn");
+    }
+    if (!S.maxQLogged && S.maxQ > 1000 && qDyn < 0.9*S.maxQ){
+      S.maxQLogged = true; log(`MAX-Q ${(S.maxQ/1000).toFixed(1)} kPa`);
+    }
+    if (!S.peakHeatLogged && S.maxQd > 50000 && qdot < 0.8*S.maxQd){
+      S.peakHeatLogged = true;
+      log(`PEAK HEATING ${(S.maxQd/1000).toFixed(0)} kW/m² — nose ${Math.round(S.Tn)} K`, "warn");
+    }
+  }
+
+  // --- escape / touchdown
+  if (S.v > 0 && eps >= 0 && S.h > Math.max(ATMO.Hm||0, 1e5)*1.5){
+    S.done = true;
+    log(`ESCAPE VELOCITY EXCEEDED — ${S.speed.toFixed(0)} m/s`, "good");
+    banner("cyan", "🌌 ESCAPE TRAJECTORY", "specific orbital energy ≥ 0 — this rocket is never coming back");
+    stopRun(); return;
+  }
+  if (S.h <= 0 && S.v <= 0 && S.lifted){
+    const vImp = S.speed;
+    S.h = 0; S.done = true;
+    if (vImp <= 10){
+      spawnDust();
+      log(`TOUCHDOWN at ${vImp.toFixed(1)} m/s — SOFT LANDING${S.mainFrac >= 1 ? " under canopy" : ""}`, "good");
+      banner("good", "✓ SOFT LANDING", `touchdown ${vImp.toFixed(1)} m/s · ${(Math.abs(S.th)*Rm/1000).toFixed(0)} km downrange · nose peaked ${Math.round(S.TnPeak||S.Tn)} K`);
+    } else {
+      spawnExplosion(1.2);
+      log(`IMPACT at ${vImp.toFixed(0)} m/s — vehicle destroyed`, "bad");
+      banner("bad", "💥 CRASH", `impact at ${vImp.toFixed(0)} m/s, ${(Math.abs(S.th)*Rm/1000).toFixed(0)} km downrange`);
+    }
+    stopRun();
+  }
+
+  // --- trajectory trail for the orbit map
+  if (S.t - S.lastTrail > S.trailDt){
+    S.lastTrail = S.t;
+    const rr = Rm + Math.max(S.h, 0);
+    S.trail.push([rr*Math.sin(S.th), rr*Math.cos(S.th)]);
+    if (S.trail.length > 1400){
+      S.trail = S.trail.filter((_, i) => i % 2 === 0);
+      S.trailDt *= 2;
+    }
+  }
+}
+function orbitAchieved(){
+  const Rm = P.radius*1000;
+  const pk = (S.rp-Rm)/1000, ak = (S.ra-Rm)/1000;
+  log(`ORBIT ACHIEVED — ${pk.toFixed(0)} × ${ak.toFixed(0)} km`, "good");
+  banner("cyan", "◉ ORBIT ACHIEVED",
+    `${pk.toFixed(0)} km × ${ak.toFixed(0)} km · ${S.speed.toFixed(0)} m/s · RETRO + throttle to come home`);
+}
+
 /* ================= RUN CONTROL ================= */
 function startRun(){
   if (!S || S.done) initState();
@@ -673,11 +968,12 @@ function startRun(){
   running = true; paused = false;
   $("btnPause").disabled = false; $("btnPause").textContent = "PAUSE";
   $("btnStart").disabled = true;
-  if (mode === "ascent"){
+  if (mode !== "descent"){
     const stack = (P.drymass + P.propmass
       + ($("stagingOn").checked ? P.s2drymass + P.s2propmass : 0)) * 1000;
     const twr0 = P.thrust*1000 / (stack * P.g0);
     log(`IGNITION — TWR ${twr0.toFixed(2)}${twr0 < 1 ? " ⚠ below 1: cannot lift off!" : ""}`, twr0 < 1 ? "warn" : "good");
+    if (mode === "orbit") log(`GUIDANCE — gravity turn ${P.pitchalt}→${P.turnend} km, target ${P.targetalt} km circular`);
   } else {
     log(`ENTRY SEQUENCE — released at ${P.entryalt} km, ${P.entryvel} m/s downward`);
   }
@@ -696,17 +992,31 @@ function resetRun(){
   charts.forEach(c => c.reset());
   particles.length = 0;
   shake = 0;
+  setBurnDir(1);
   initState();
 }
 function setMode(m){
   mode = m;
   $("tabAscent").classList.toggle("active", m === "ascent");
   $("tabDescent").classList.toggle("active", m === "descent");
+  $("tabOrbit").classList.toggle("active", m === "orbit");
   $("entryBox").style.display = m === "descent" ? "" : "none";
-  $("btnStart").textContent = m === "ascent" ? "LAUNCH" : "BEGIN ENTRY";
-  $("throttle").value = m === "ascent" ? 100 : 0;
+  $("orbitBox").style.display = m === "orbit" ? "" : "none";
+  $("burnDirRow").style.display = m === "orbit" ? "flex" : "none";
+  $("btnStart").textContent = m === "ascent" ? "LAUNCH" : m === "orbit" ? "LAUNCH TO ORBIT" : "BEGIN ENTRY";
+  $("throttle").value = m === "descent" ? 0 : 100;
   $("throttleVal").textContent = $("throttle").value + "%";
   resetRun();
+}
+function forceThrottle(v){
+  $("throttle").value = v;
+  $("throttleVal").textContent = v + "%";
+}
+let burnDir = 1;
+function setBurnDir(d){
+  burnDir = d;
+  $("btnPro").classList.toggle("active", d > 0);
+  $("btnRetro").classList.toggle("active", d < 0);
 }
 
 /* ================= EVENT LOG & BANNER ================= */
@@ -736,7 +1046,8 @@ function updateReadouts(){
   const t = S.t, mm = String(Math.floor(t/60)).padStart(2,"0"), ss = (t%60).toFixed(1).padStart(4,"0");
   $("roMet").textContent  = `T+ ${mm}:${ss}`;
   $("roAlt").textContent  = fmtAlt(Math.max(S.h,0));
-  $("roVel").textContent  = (S.v>=0?"▲ ":"▼ ") + Math.abs(S.v).toFixed(S.v<100?1:0) + " m/s";
+  const spdShow = mode === "orbit" ? (S.speed||0) : Math.abs(S.v);
+  $("roVel").textContent  = (S.v>=0?"▲ ":"▼ ") + spdShow.toFixed(spdShow<100?1:0) + " m/s";
   $("roMach").textContent = S.atm.rho > 0 ? S.mach.toFixed(2) : "— (vacuum)";
   $("roAcc").textContent  = S.accFelt.toFixed(2) + " g";
   $("roAcc").className    = "v" + (S.accFelt > 8 ? " bad" : S.accFelt > 4 ? " warn" : "");
@@ -751,6 +1062,14 @@ function updateReadouts(){
   $("roQ").textContent    = (S.qNow/1000).toFixed(1) + " kPa";
   $("roIsp").textContent  = S.ispNow > 0 ? S.ispNow.toFixed(0)+" s" : "—";
   $("roApo").textContent  = S.maxH > 10 ? fmtAlt(S.maxH) : "—";
+  if (mode === "orbit"){
+    const Rm = P.radius*1000;
+    $("roApoapsis").textContent  = isFinite(S.ra) && S.ra > 0 ? ((S.ra-Rm)/1000).toFixed(0)+" km" : (S.ra === Infinity ? "∞" : "—");
+    $("roPeriapsis").textContent = S.rp > 0 ? ((S.rp-Rm)/1000).toFixed(0)+" km" : "—";
+  } else {
+    $("roApoapsis").textContent = "—";
+    $("roPeriapsis").textContent = "—";
+  }
   $("roRho").textContent  = S.atm.rho > 0.001 ? S.atm.rho.toFixed(3)+" kg/m³"
                           : S.atm.rho > 0 ? S.atm.rho.toExponential(2)+" kg/m³" : "0 (vacuum)";
   $("roPair").textContent = S.atm.P > 100 ? (S.atm.P/1000).toFixed(1)+" kPa"
@@ -1013,7 +1332,8 @@ function render(){
   if (!S){ ctx.clearRect(0,0,W,H); return; }
 
   // camera: keep ~2.5 s of travel on screen; smooth zoom
-  const targetScale = Math.min(4, Math.max(2e-4, H*0.28 / Math.max(40, Math.abs(S.v)*2.5)));
+  const camSpd = mode === "orbit" ? (S.speed || 0) : Math.abs(S.v);
+  const targetScale = Math.min(4, Math.max(2e-4, H*0.28 / Math.max(40, camSpd*2.5)));
   camScale += (targetScale - camScale) * 0.06;
   const rocketY = H * 0.42;
   const camBottom = S.h - (H - rocketY)/camScale;
@@ -1146,9 +1466,9 @@ function drawGroundScene(W, H, yOf){
   gg.addColorStop(0,"#2a3b24"); gg.addColorStop(0.25,"#22301d"); gg.addColorStop(1,"#0b1208");
   ctx.fillStyle = gg; ctx.fillRect(0, yg, W, Math.max(H-yg,0)+180);
 
-  // launch complex, in true world scale (metres × camScale)
+  // launch complex, in true world scale (metres × camScale) — only near the pad
   const px = camScale;
-  if (px > 0.12){
+  if (px > 0.12 && Math.abs(S.th || 0)*P.radius*1000 < 5000){
     const mx = m => W/2 + m*px, my = m => yg - m*px;
     ctx.fillStyle = "#11161d";                                       // flame trench
     ctx.fillRect(mx(-14), yg, 28*px, Math.min(8*px, 26));
@@ -1234,7 +1554,7 @@ function drawRocket(px, py){
 
   ctx.save();
   ctx.translate(px, py);
-  if (S.orient < 0) ctx.rotate(Math.PI);
+  ctx.rotate(mode === "orbit" ? (S.ang || 0) : (S.orient < 0 ? Math.PI : 0));
   const yb = -BL/2 + NL, yt = -BL/2;
 
   /* --- re-entry plasma: envelope, bow shock, incandescent wake --- */
@@ -1271,7 +1591,7 @@ function drawRocket(px, py){
   }
 
   /* --- main engine plume: layered, expands in vacuum, shock diamonds in dense air --- */
-  if (thr > 0 && S.orient > 0){
+  if (thr > 0 && (mode === "orbit" || S.orient > 0)){
     const flick = 0.92 + Math.random()*0.16;
     const fl = (26 + 88*thr) * (1 + 1.1*vac) * flick;
     const fw = BW*0.66 * (1 + 1.5*vac);
@@ -1309,8 +1629,8 @@ function drawRocket(px, py){
     ctx.beginPath(); ctx.ellipse(0, BL/2+2, BW*0.34, 4, 0, 0, 7); ctx.fill();
   }
 
-  /* --- retro plumes (decelerating a fall, nose-down) --- */
-  if (thr > 0 && S.orient < 0){
+  /* --- retro plumes (decelerating a fall, nose-down; 1-D modes only) --- */
+  if (thr > 0 && mode !== "orbit" && S.orient < 0){
     const fl = (18 + 48*thr) * (0.9+Math.random()*0.25);
     for (const sx of [-BW*0.78, BW*0.78]){
       const fg = ctx.createLinearGradient(0, yt, 0, yt - fl);
@@ -1402,6 +1722,12 @@ function drawHud(W, H){
   ctx.fillText(`VEL ${(S.v>=0?"▲":"▼")} ${Math.abs(S.v).toFixed(0)} m/s`, 10, 52);
   if (S.atm.rho > 0) ctx.fillText(`MACH ${S.mach.toFixed(2)}`, 10, 68);
   let hy = S.atm.rho > 0 ? 88 : 72;
+  if (mode === "orbit"){
+    ctx.fillStyle = "rgba(79,209,255,0.85)";
+    ctx.fillText(`DOWNRANGE ${(Math.abs(S.th||0)*P.radius).toFixed(0)} km`, 10, hy); hy += 16;
+    ctx.fillText(`PHASE: ${(S.ophase||"").toUpperCase()}`, 10, hy); hy += 16;
+    drawOrbitMap(W, H);
+  }
   if (S.chute === "drogue"){
     ctx.fillStyle = "rgba(255,180,84,0.9)";
     ctx.fillText("DROGUE OUT", 10, hy); hy += 16;
@@ -1420,13 +1746,56 @@ function drawHud(W, H){
   }
 }
 
+function drawOrbitMap(W, H){
+  const s = Math.min(240, Math.max(150, W*0.30));
+  const x0 = W - s - 12, y0 = 12, cx = x0 + s/2, cy = y0 + s/2;
+  const Rm = P.radius*1000;
+  let extent = Math.max(Rm + P.targetalt*1000*1.8, Rm + Math.max(S.h, 0));
+  if (isFinite(S.ra) && S.ra > 0) extent = Math.max(extent, S.ra);
+  const sc = (s/2 - 8)/extent;
+  ctx.fillStyle = "rgba(5,9,16,0.72)";
+  ctx.strokeStyle = "rgba(28,41,66,0.9)";
+  ctx.beginPath(); ctx.roundRect(x0, y0, s, s, 8); ctx.fill(); ctx.stroke();
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(x0, y0, s, s, 8); ctx.clip();
+  if (!ATMO.vac){
+    ctx.fillStyle = "rgba(79,160,255,0.16)";
+    ctx.beginPath(); ctx.arc(cx, cy, (Rm+ATMO.Hm)*sc, 0, 7); ctx.fill();
+  }
+  const pg = ctx.createRadialGradient(cx-Rm*sc*0.3, cy-Rm*sc*0.3, Rm*sc*0.2, cx, cy, Math.max(Rm*sc,4));
+  pg.addColorStop(0, "#3f6f4e"); pg.addColorStop(0.6, "#2c5170"); pg.addColorStop(1, "#152436");
+  ctx.fillStyle = pg;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.max(Rm*sc, 4), 0, 7); ctx.fill();
+  ctx.strokeStyle = "rgba(93,255,163,0.5)"; ctx.setLineDash([4,4]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, (Rm+P.targetalt*1000)*sc, 0, 7); ctx.stroke();
+  ctx.setLineDash([]);
+  if (S.trail && S.trail.length > 1){
+    ctx.strokeStyle = "rgba(79,209,255,0.75)"; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = 0; i < S.trail.length; i++){
+      const tx = cx + S.trail[i][0]*sc, ty = cy - S.trail[i][1]*sc;
+      i ? ctx.lineTo(tx, ty) : ctx.moveTo(tx, ty);
+    }
+    ctx.stroke();
+  }
+  const rr = Rm + Math.max(S.h, 0);
+  ctx.fillStyle = "#ffb454";
+  ctx.beginPath();
+  ctx.arc(cx + rr*Math.sin(S.th||0)*sc, cy - rr*Math.cos(S.th||0)*sc, 3, 0, 7);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "rgba(200,212,232,0.85)"; ctx.font = "10px Consolas,monospace";
+  const apoTxt = isFinite(S.ra) ? ((S.ra-Rm)/1000).toFixed(0) : "∞";
+  ctx.fillText(`APO ${apoTxt} km · PERI ${((S.rp-Rm)/1000).toFixed(0)} km`, x0+8, y0+s-8);
+}
+
 /* ================= MAIN LOOP =================
    Physics runs on a wall-clock interval (keeps ticking even when the tab is
    background-throttled); rendering runs on requestAnimationFrame. */
 let lastTick = performance.now(), simAccum = 0;
 function pushCharts(){
   charts[0].push(S.t, S.h/1000);
-  charts[1].push(S.t, S.v);
+  charts[1].push(S.t, mode === "orbit" ? (S.speed||0) : S.v);
   charts[2].push(S.t, S.mach);
   charts[3].push(S.t, S.Tn);
   charts[4].push(S.t, S.qNow/1000);
@@ -1476,6 +1845,9 @@ $("btnPause").addEventListener("click", () => {
 $("btnReset").addEventListener("click", resetRun);
 $("tabAscent").addEventListener("click", () => setMode("ascent"));
 $("tabDescent").addEventListener("click", () => setMode("descent"));
+$("tabOrbit").addEventListener("click", () => setMode("orbit"));
+$("btnPro").addEventListener("click", () => setBurnDir(1));
+$("btnRetro").addEventListener("click", () => setBurnDir(-1));
 $("throttle").addEventListener("input", () => $("throttleVal").textContent = $("throttle").value + "%");
 document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
@@ -1490,15 +1862,16 @@ requestAnimationFrame(frame);
 window.__ROCKET = {
   get S(){ return S }, get P(){ return P }, get mode(){ return mode },
   get running(){ return running }, get atmo(){ return ATMO },
-  start: startRun, reset: resetRun, setMode, atmoAt,
+  start: startRun, reset: resetRun, setMode, atmoAt, setBurnDir, forceThrottle,
   // synchronously advance the simulation by `sec` seconds (testing/automation)
   step(sec){
     if (!S) initState();
     let n = Math.min(Math.round(sec/DT), 5e5);
     while (n-- > 0 && !S.done) physicsStep(DT);
     pushCharts(); updateReadouts();
-    return { t:S.t, h:S.h, v:S.v, mach:S.mach, Tn:S.Tn, prop:S.prop, prop2:S.prop2,
-             stage:S.stage, maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
+    return { t:S.t, h:S.h, v:S.v, vt:S.vt, speed:S.speed, mach:S.mach, Tn:S.Tn,
+             prop:S.prop, prop2:S.prop2, stage:S.stage, ophase:S.ophase, ra:S.ra, rp:S.rp,
+             th:S.th, maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
   },
 };
 </script>
