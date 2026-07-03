@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocket Flight Lab — Ascent &amp; Re-entry Simulator</title>
+<style>
+:root{
+  --bg:#05070d; --panel:#0b111d; --panel2:#101a2c; --line:#1c2942;
+  --txt:#c8d4e8; --dim:#66738c; --cyan:#4fd1ff; --amber:#ffb454;
+  --red:#ff5566; --green:#5dffa3; --violet:#b48cff;
+  --mono:"Cascadia Mono","Consolas","JetBrains Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:13px;
+  display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:16px;padding:8px 14px;
+  background:var(--panel);border-bottom:1px solid var(--line);flex:0 0 auto;flex-wrap:wrap}
+.logo{font-size:15px;font-weight:bold;color:var(--cyan);letter-spacing:1px;white-space:nowrap}
+.logo small{color:var(--dim);font-weight:normal;letter-spacing:0}
+.tabs{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tabs button{background:none;border:none;color:var(--dim);font-family:var(--mono);
+  font-size:12px;padding:7px 14px;cursor:pointer;letter-spacing:.5px}
+.tabs button.active{background:var(--panel2);color:var(--cyan)}
+.runbox{display:flex;gap:8px;margin-left:auto;align-items:center}
+.runbox button{font-family:var(--mono);font-size:12px;letter-spacing:1px;padding:8px 16px;
+  border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);cursor:pointer}
+.runbox button:disabled{opacity:.35;cursor:default}
+#btnStart{background:#0c2b18;border-color:#1d5c36;color:var(--green);font-weight:bold}
+#btnReset{color:var(--amber)}
+select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+  border-radius:5px;font-family:var(--mono);font-size:12px;padding:6px 8px}
+main{flex:1;display:flex;min-height:0}
+#controls{width:302px;flex:0 0 auto;overflow-y:auto;background:var(--panel);
+  border-right:1px solid var(--line);padding:10px}
+#telemetry{width:348px;flex:0 0 auto;overflow-y:auto;background:var(--panel);
+  border-left:1px solid var(--line);padding:10px}
+#stage{flex:1;position:relative;min-width:200px;background:#000}
+#sim{position:absolute;inset:0;width:100%;height:100%;display:block}
+details{border:1px solid var(--line);border-radius:7px;margin-bottom:9px;background:var(--panel2)}
+details summary{cursor:pointer;padding:7px 10px;color:var(--amber);font-size:11px;
+  letter-spacing:1.5px;user-select:none;list-style:none}
+details summary::before{content:"▸ ";color:var(--dim)}
+details[open] summary::before{content:"▾ "}
+details .body{padding:2px 10px 10px}
+.prow{margin-bottom:8px}
+.prow label{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:3px}
+.prow label .pv{color:var(--txt)}
+.pin{display:flex;gap:6px;align-items:center}
+.pin input[type=range]{flex:1;accent-color:var(--cyan);height:14px}
+.pin input[type=number]{width:76px;background:var(--bg);color:var(--cyan);border:1px solid var(--line);
+  border-radius:4px;font-family:var(--mono);font-size:12px;padding:3px 5px;text-align:right}
+.selrow{margin-bottom:8px}
+.selrow label{display:block;font-size:11px;color:var(--dim);margin-bottom:3px}
+.selrow select{width:100%}
+.note{font-size:10px;color:var(--dim);line-height:1.5;margin-top:4px}
+.note b{color:var(--txt);font-weight:normal}
+.ro-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.ro{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.ro .l{font-size:9.5px;color:var(--dim);letter-spacing:.5px}
+.ro .v{font-size:14px;color:var(--cyan);margin-top:1px;white-space:nowrap}
+.ro .v.warn{color:var(--amber)} .ro .v.bad{color:var(--red)} .ro .v.good{color:var(--green)}
+.bar{height:9px;background:var(--bg);border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;background:var(--cyan);width:0%;transition:none}
+.chartbox{margin-bottom:8px}
+.chartbox canvas{width:100%;height:62px;display:block;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px}
+h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
+#log{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  max-height:170px;overflow-y:auto;padding:6px 8px;font-size:11px;line-height:1.7}
+#log .ev b{color:var(--cyan);font-weight:normal}
+#log .ev.warn b{color:var(--amber)} #log .ev.bad b{color:var(--red)} #log .ev.good b{color:var(--green)}
+#banner{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);display:none;
+  padding:18px 34px;border-radius:10px;font-size:20px;letter-spacing:2px;text-align:center;
+  background:rgba(5,7,13,.88);border:1px solid var(--line);backdrop-filter:blur(3px)}
+#banner.show{display:block}
+#banner.good{color:var(--green);border-color:#1d5c36}
+#banner.bad{color:var(--red);border-color:#7a1f2b}
+#banner.warn{color:var(--amber);border-color:#7a5a1f}
+#banner.cyan{color:var(--cyan);border-color:#1f5a7a}
+#banner small{display:block;font-size:12px;color:var(--dim);letter-spacing:0;margin-top:8px}
+#throttleBox{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);margin-bottom:9px}
+#throttleBox label{display:flex;justify-content:space-between;font-size:11px;color:var(--amber);
+  letter-spacing:1.5px;margin-bottom:5px}
+#throttle{width:100%;accent-color:var(--amber)}
+.kbd{font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6}
+.kbd b{color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:3px;
+  padding:0 4px;font-weight:normal}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+@media (max-width:1050px){
+  body{overflow:auto}
+  main{flex-direction:column}
+  #controls,#telemetry{width:100%;border:none;border-bottom:1px solid var(--line)}
+  #stage{min-height:420px;order:-1}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🚀 ROCKET FLIGHT LAB <small>· ascent &amp; re-entry physics simulator</small></div>
+  <div class="tabs">
+    <button id="tabAscent" class="active">▲ ASCENT</button>
+    <button id="tabDescent">▼ DESCENT / RE-ENTRY</button>
+  </div>
+  <div class="runbox">
+    <select id="warp" title="Time warp">
+      <option value="0.5">0.5×</option><option value="1" selected>1×</option>
+      <option value="2">2×</option><option value="5">5×</option>
+      <option value="10">10×</option><option value="25">25×</option><option value="50">50×</option>
+    </select>
+    <button id="btnStart">LAUNCH</button>
+    <button id="btnPause" disabled>PAUSE</button>
+    <button id="btnReset">RESET</button>
+  </div>
+</header>
+<main>
+  <aside id="controls">
+    <div id="throttleBox">
+      <label>THROTTLE <span id="throttleVal">100%</span></label>
+      <input type="range" id="throttle" min="0" max="100" step="1" value="100">
+      <div class="kbd"><b>↑</b>/<b>↓</b> throttle · <b>Space</b> pause · <b>R</b> reset</div>
+    </div>
+
+    <details open><summary>PLANET &amp; GRAVITY</summary><div class="body">
+      <div class="selrow"><label>World preset</label>
+        <select id="preset">
+          <option value="earth" selected>Earth</option>
+          <option value="moon">Moon (airless)</option>
+          <option value="mars">Mars</option>
+          <option value="venus">Venus</option>
+          <option value="titan">Titan</option>
+          <option value="custom">— Custom —</option>
+        </select></div>
+      <div id="grp-planet"></div>
+    </div></details>
+
+    <details open><summary>ATMOSPHERE</summary><div class="body">
+      <div id="grp-atmo"></div>
+      <div class="note">Pressure profile is solved from the hydrostatic equation
+        dP/dh = −ρ·g(h) with T(h) = max(T₀ − L·h, 0.72·T₀); density from ideal gas law.
+        Air ends exactly at the extent you set.</div>
+    </div></details>
+
+    <details open><summary>ROCKET &amp; PROPULSION</summary><div class="body">
+      <div id="grp-rocket"></div>
+      <div class="selrow"><label>Propellant</label><select id="fuel"></select></div>
+      <div class="note" id="fuelNote"></div>
+    </div></details>
+
+    <details open><summary>NOSE &amp; THERMAL PROTECTION</summary><div class="body">
+      <div class="selrow"><label>Nose shape</label><select id="nose"></select></div>
+      <div class="note" id="noseNote"></div>
+      <div class="selrow" style="margin-top:8px"><label>Nose material</label><select id="material"></select></div>
+      <div class="note" id="matNote"></div>
+    </div></details>
+
+    <details open id="entryBox" style="display:none"><summary>ENTRY CONDITIONS</summary><div class="body">
+      <div id="grp-entry"></div>
+      <div class="note">Vehicle enters nose-first. Throttle fires retro-thrust
+        (deceleration) — try a landing burn.</div>
+    </div></details>
+  </aside>
+
+  <section id="stage">
+    <canvas id="sim"></canvas>
+    <div id="banner"></div>
+  </section>
+
+  <aside id="telemetry">
+    <div class="ro-grid">
+      <div class="ro"><div class="l">MISSION TIME</div><div class="v" id="roMet">T+ 00:00.0</div></div>
+      <div class="ro"><div class="l">ALTITUDE</div><div class="v" id="roAlt">0 m</div></div>
+      <div class="ro"><div class="l">VELOCITY</div><div class="v" id="roVel">0 m/s</div></div>
+      <div class="ro"><div class="l">MACH</div><div class="v" id="roMach">0.00</div></div>
+      <div class="ro"><div class="l">ACCEL (FELT)</div><div class="v" id="roAcc">0.0 g</div></div>
+      <div class="ro"><div class="l">LOCAL GRAVITY</div><div class="v" id="roG">9.81 m/s²</div></div>
+      <div class="ro"><div class="l">THRUST</div><div class="v" id="roThrust">0 kN</div></div>
+      <div class="ro"><div class="l">TWR</div><div class="v" id="roTwr">—</div></div>
+      <div class="ro"><div class="l">DRAG</div><div class="v" id="roDrag">0 kN</div></div>
+      <div class="ro"><div class="l">DYN PRESSURE q</div><div class="v" id="roQ">0 kPa</div></div>
+      <div class="ro"><div class="l">EFFECTIVE Isp</div><div class="v" id="roIsp">—</div></div>
+      <div class="ro"><div class="l">APOGEE</div><div class="v" id="roApo">—</div></div>
+      <div class="ro"><div class="l">AIR DENSITY</div><div class="v" id="roRho">1.225 kg/m³</div></div>
+      <div class="ro"><div class="l">AIR PRESSURE</div><div class="v" id="roPair">101.3 kPa</div></div>
+      <div class="ro"><div class="l">AIR TEMP</div><div class="v" id="roTair">288 K</div></div>
+      <div class="ro"><div class="l">HEAT FLUX q̇</div><div class="v" id="roQdot">0 kW/m²</div></div>
+    </div>
+
+    <div class="ro" style="margin-bottom:6px">
+      <div class="l">PROPELLANT <span id="roPropTxt" style="float:right;color:var(--txt)">100%</span></div>
+      <div class="bar"><i id="propBar" style="background:var(--green)"></i></div>
+    </div>
+    <div class="ro" style="margin-bottom:10px">
+      <div class="l">NOSE TEMP <span id="roNoseTxt" style="float:right;color:var(--txt)">288 K / limit 775 K</span></div>
+      <div class="bar"><i id="noseBar" style="background:var(--amber)"></i></div>
+    </div>
+
+    <h3 class="sec">TELEMETRY GRAPHS</h3>
+    <div class="chartbox"><canvas id="chAlt"></canvas></div>
+    <div class="chartbox"><canvas id="chVel"></canvas></div>
+    <div class="chartbox"><canvas id="chMach"></canvas></div>
+    <div class="chartbox"><canvas id="chNose"></canvas></div>
+    <div class="chartbox"><canvas id="chQ"></canvas></div>
+
+    <h3 class="sec">FLIGHT EVENTS</h3>
+    <div id="log"></div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+/* ================= CONSTANTS & DATA ================= */
+const G_STD = 9.80665;              // standard gravity for Isp (m/s²)
+const SB    = 5.670374419e-8;       // Stefan–Boltzmann (W/m²K⁴)
+const SG_K  = 1.7415e-4;            // Sutton–Graves constant, SI (air)
+const SKIN  = 0.006;                // nose skin thickness for lumped thermal mass (m)
+const T_ABL = 2900;                 // ablation onset temperature (K)
+
+const FUELS = {
+  kerolox:   {name:"RP-1 / LOX  (kerolox)",       ispSL:283, ispVac:311, color:"#ffb347",
+              info:"Kerosene + liquid oxygen. Dense, storable-ish, workhorse of Falcon 9 & Soyuz."},
+  hydrolox:  {name:"LH₂ / LOX  (hydrolox)",        ispSL:366, ispVac:452, color:"#9fd8ff",
+              info:"Liquid hydrogen + LOX. Highest Isp of any chemical fuel — SLS, Delta IV, LVM3 C25."},
+  methalox:  {name:"CH₄ / LOX  (methalox)",        ispSL:330, ispVac:356, color:"#b48cff",
+              info:"Methane + LOX. Clean-burning, ISRU-friendly for Mars — Raptor, BE-4."},
+  hypergolic:{name:"N₂O₄ / UDMH  (hypergolic)",    ispSL:285, ispVac:316, color:"#ffd27f",
+              info:"Ignites on contact, storable for years — PSLV upper stages, Proton, spacecraft RCS."},
+  solid:     {name:"APCP solid",                   ispSL:242, ispVac:268, color:"#ff8c66",
+              info:"Ammonium-perchlorate composite. Simple, huge thrust, no throttling in reality — SRBs, S200."},
+};
+
+const NOSES = {
+  cone:   {name:"Conical (sharp)",  cd0:0.30, cdPeak:0.62, cdSup:0.26, rn:0.08,
+           info:"Low supersonic drag, tiny nose radius → severe stagnation heating."},
+  ogive:  {name:"Ogive (tangent)",  cd0:0.26, cdPeak:0.55, cdSup:0.22, rn:0.12,
+           info:"Best all-round supersonic shape — most launch vehicles and missiles."},
+  para:   {name:"Parabolic",        cd0:0.28, cdPeak:0.58, cdSup:0.25, rn:0.18,
+           info:"Smooth transonic behaviour, moderate heating."},
+  sphere: {name:"Spherical (blunt)",cd0:0.48, cdPeak:0.95, cdSup:0.85, rnFrac:0.5,
+           info:"High drag, but the detached bow shock keeps heat flux low (q̇ ∝ 1/√rₙ) — re-entry capsules."},
+  flat:   {name:"Flat face",        cd0:0.85, cdPeak:1.25, cdSup:1.15, rnFrac:0.9,
+           info:"Maximum drag brake. Largest effective nose radius → lowest heat flux, brutal deceleration."},
+};
+
+const MATERIALS = {
+  aluminum: {name:"Aluminium 2024",     maxT:775,  rho:2780, cp:875,  eps:0.30,
+             info:"Light and cheap; softens near 775 K. Fine for slow ascent, hopeless for re-entry."},
+  titanium: {name:"Titanium Ti-6Al-4V", maxT:1870, rho:4430, cp:526,  eps:0.45,
+             info:"Aerospace staple — SR-71 skin territory."},
+  steel:    {name:"Stainless 310",      maxT:1670, rho:7900, cp:500,  eps:0.55,
+             info:"Heavy but tough — Starship's hot-structure philosophy."},
+  inconel:  {name:"Inconel X-750",      maxT:1665, rho:8280, cp:435,  eps:0.70,
+             info:"Nickel superalloy — X-15 skin, engine parts."},
+  carbon:   {name:"Carbon–Carbon (RCC)",maxT:2800, rho:1780, cp:1050, eps:0.85,
+             info:"Shuttle wing leading edges. Survives ~2800 K reusable."},
+  pica:     {name:"PICA ablative",      maxT:3800, rho:270,  cp:1500, eps:0.90, ablative:true,
+             hAbl:2.5e7, ablStock:12,
+             info:"Phenolic-impregnated carbon ablator (Stardust, Dragon). Sacrifices itself to carry heat away."},
+};
+
+const PLANETS = {
+  earth:{g0:9.81, radius:6371, hatm:100, p0:101.3, t0:288, lapse:6.5, rs:287, gamma:1.40},
+  moon: {g0:1.62, radius:1737, hatm:0,   p0:0,     t0:250, lapse:0,   rs:287, gamma:1.40},
+  mars: {g0:3.71, radius:3390, hatm:80,  p0:0.61,  t0:210, lapse:2.5, rs:189, gamma:1.30},
+  venus:{g0:8.87, radius:6052, hatm:250, p0:9200,  t0:737, lapse:7.7, rs:188, gamma:1.29},
+  titan:{g0:1.35, radius:2575, hatm:600, p0:146.7, t0:94,  lapse:1.0, rs:290, gamma:1.40},
+};
+
+const PARAM_DEFS = [
+  {id:"g0",      g:"planet", label:"Surface gravity g₀", unit:"m/s²",   min:0.1, max:30,    step:0.01, val:9.81},
+  {id:"radius",  g:"planet", label:"Planet radius",      unit:"km",     min:200, max:20000, step:10,   val:6371},
+  {id:"hatm",    g:"atmo",   label:"Atmosphere extent",  unit:"km",     min:0,   max:1000,  step:5,    val:100},
+  {id:"p0",      g:"atmo",   label:"Surface pressure",   unit:"kPa",    min:0,   max:9500,  step:0.5,  val:101.3},
+  {id:"t0",      g:"atmo",   label:"Surface temperature",unit:"K",      min:30,  max:800,   step:1,    val:288},
+  {id:"lapse",   g:"atmo",   label:"Lapse rate",         unit:"K/km",   min:0,   max:15,    step:0.1,  val:6.5},
+  {id:"rs",      g:"atmo",   label:"Gas constant R",     unit:"J/kg·K", min:100, max:600,   step:1,    val:287},
+  {id:"gamma",   g:"atmo",   label:"Heat ratio γ",       unit:"",       min:1.1, max:1.7,   step:0.01, val:1.4},
+  {id:"drymass", g:"rocket", label:"Dry mass",           unit:"t",      min:0.1, max:500,   step:0.1,  val:2.5},
+  {id:"propmass",g:"rocket", label:"Propellant mass",    unit:"t",      min:0,   max:1000,  step:0.5,  val:10},
+  {id:"thrust",  g:"rocket", label:"Max thrust",         unit:"kN",     min:0,   max:20000, step:10,   val:250},
+  {id:"dia",     g:"rocket", label:"Body diameter",      unit:"m",      min:0.3, max:12,    step:0.1,  val:1.8},
+  {id:"entryalt",g:"entry",  label:"Entry altitude",     unit:"km",     min:1,   max:2000,  step:1,    val:120},
+  {id:"entryvel",g:"entry",  label:"Entry speed (down)", unit:"m/s",    min:0,   max:12000, step:50,   val:3000},
+];
+
+/* ================= PARAMETERS / UI BINDING ================= */
+const P = {};                      // live parameter values (in the units shown above)
+const $ = id => document.getElementById(id);
+
+function buildControls(){
+  for (const d of PARAM_DEFS){
+    P[d.id] = d.val;
+    const row = document.createElement("div");
+    row.className = "prow";
+    row.innerHTML =
+      `<label>${d.label} <span class="pv"><span id="pv_${d.id}"></span> ${d.unit}</span></label>
+       <div class="pin">
+         <input type="range" id="rg_${d.id}" min="${d.min}" max="${d.max}" step="${d.step}" value="${d.val}">
+         <input type="number" id="nm_${d.id}" min="${d.min}" max="${d.max}" step="${d.step}" value="${d.val}">
+       </div>`;
+    $("grp-"+d.g).appendChild(row);
+    const rg = $("rg_"+d.id), nm = $("nm_"+d.id), pv = $("pv_"+d.id);
+    pv.textContent = d.val;
+    const set = v => {
+      v = Math.min(d.max, Math.max(d.min, +v || 0));
+      P[d.id] = v; rg.value = v; nm.value = v; pv.textContent = +v.toFixed(3);
+      onParamChange(d);
+    };
+    rg.addEventListener("input", () => set(rg.value));
+    nm.addEventListener("change", () => set(nm.value));
+  }
+  fillSelect("fuel", FUELS, "kerolox");
+  fillSelect("nose", NOSES, "ogive");
+  fillSelect("material", MATERIALS, "aluminum");
+  $("fuel").addEventListener("change", refreshNotes);
+  $("nose").addEventListener("change", refreshNotes);
+  $("material").addEventListener("change", refreshNotes);
+  $("preset").addEventListener("change", applyPreset);
+  refreshNotes();
+}
+function fillSelect(id, obj, sel){
+  const s = $(id);
+  for (const k in obj){
+    const o = document.createElement("option");
+    o.value = k; o.textContent = obj[k].name;
+    if (k === sel) o.selected = true;
+    s.appendChild(o);
+  }
+}
+function setParam(id, v){
+  const d = PARAM_DEFS.find(x => x.id === id);
+  P[id] = v; $("rg_"+id).value = v; $("nm_"+id).value = v;
+  $("pv_"+id).textContent = +(+v).toFixed(3);
+}
+function applyPreset(){
+  const k = $("preset").value;
+  if (k === "custom") return;
+  const pl = PLANETS[k];
+  for (const key in pl) setParam(key, pl[key]);
+  buildAtmo();
+  if (!running) initState();
+}
+function onParamChange(d){
+  if (d.g === "planet" || d.g === "atmo"){
+    $("preset").value = "custom";
+    buildAtmo();
+  }
+  if (!running) initState();
+}
+function refreshNotes(){
+  const f = FUELS[$("fuel").value], n = NOSES[$("nose").value], m = MATERIALS[$("material").value];
+  $("fuelNote").innerHTML = `<b>Isp ${f.ispSL}s SL / ${f.ispVac}s vac.</b> ${f.info}`;
+  $("noseNote").innerHTML = `<b>Cd₀ ${n.cd0} · nose radius ${noseRadius(n).toFixed(2)} m.</b> ${n.info}`;
+  $("matNote").innerHTML  = `<b>Fails at ${m.maxT} K${m.ablative ? " (ablates from "+T_ABL+" K)" : ""}.</b> ${m.info}`;
+  if (!running) initState();
+}
+function noseRadius(n){
+  return n.rnFrac ? Math.max(0.05, n.rnFrac * P.dia/2) : n.rn;
+}
+
+/* ================= ATMOSPHERE MODEL ================= */
+/* Table built by integrating hydrostatic equilibrium with altitude-varying gravity.
+   T(h) = max(T0 - L*h, 0.72*T0); rho = P/(Rs*T); smooth taper to zero over the top 8%. */
+let ATMO = {vac:true};
+function buildAtmo(){
+  const Hm = P.hatm * 1000;
+  if (Hm <= 1 || P.p0 <= 0){ ATMO = {vac:true, Hm:Math.max(Hm,0)}; return; }
+  const N = 1200, dh = Hm / N;
+  const T = new Float64Array(N+1), Pr = new Float64Array(N+1), Rho = new Float64Array(N+1);
+  const Tmin = Math.max(P.t0 * 0.72, 4);
+  const Tof = h => Math.max(P.t0 - (P.lapse/1000)*h, Tmin);
+  const Rm = P.radius * 1000;
+  const gOf = h => P.g0 * (Rm/(Rm+h))**2;
+  let p = P.p0 * 1000;
+  for (let i = 0; i <= N; i++){
+    const h = i * dh;
+    T[i] = Tof(h);
+    // taper so the atmosphere really ends at Hm (user-set edge)
+    const s = Math.min(1, (Hm - h) / (0.08 * Hm));
+    const taper = s*s*(3 - 2*s);
+    Pr[i]  = p * taper;
+    Rho[i] = (p / (P.rs * T[i])) * taper;
+    // midpoint (RK2) hydrostatic step
+    if (i < N){
+      const k1 = -(p / (P.rs * Tof(h))) * gOf(h);
+      const pm = Math.max(p + k1*dh/2, 0);
+      const k2 = -(pm / (P.rs * Tof(h+dh/2))) * gOf(h+dh/2);
+      p = Math.max(p + k2*dh, 0);
+    }
+  }
+  ATMO = {vac:false, Hm, dh, T, Pr, Rho, rho0:Rho[0]};
+}
+function atmoAt(h){
+  if (ATMO.vac || h >= ATMO.Hm) return {T:3, P:0, rho:0};
+  if (h < 0) h = 0;
+  const x = h / ATMO.dh, i = Math.min(Math.floor(x), ATMO.T.length-2), f = x - i;
+  return {
+    T:   ATMO.T[i]   + (ATMO.T[i+1]  - ATMO.T[i])  * f,
+    P:   ATMO.Pr[i]  + (ATMO.Pr[i+1] - ATMO.Pr[i]) * f,
+    rho: ATMO.Rho[i] + (ATMO.Rho[i+1]- ATMO.Rho[i])* f,
+  };
+}
+function soundSpeed(T){ return Math.sqrt(P.gamma * P.rs * Math.max(T,1)); }
+
+/* ================= AERODYNAMICS & HEATING ================= */
+function dragCoeff(n, M){
+  if (M < 0.8) return n.cd0;
+  if (M < 1.2) return n.cd0 + (n.cdPeak - n.cd0) * (M - 0.8) / 0.4;
+  return n.cdSup + (n.cdPeak - n.cdSup) * Math.exp(-(M - 1.2) / 1.3);
+}
+
+/* ================= SIMULATION STATE ================= */
+let mode = "ascent";
+let S = null, running = false, paused = false;
+const DT = 0.01;
+
+function initState(){
+  const mat = MATERIALS[$("material").value];
+  const h0 = mode === "ascent" ? 0 : P.entryalt * 1000;
+  const atm0 = atmoAt(h0);
+  S = {
+    t:0, h:h0,
+    v: mode === "ascent" ? 0 : -P.entryvel,
+    prop: P.propmass * 1000,
+    Tn: Math.max(atm0.T, mode === "ascent" ? P.t0 : 220),
+    abl: mat.ablative ? mat.ablStock : 0, ablDead:false,
+    maxH:h0, maxQ:0, maxQd:0, qNow:0, qdNow:0, mach:0,
+    thrustNow:0, dragNow:0, accFelt:0, ispNow:0, gNow:localG(h0),
+    lifted: mode === "descent", meco:false, done:false, failed:false,
+    apogeeLogged:false, maxQLogged:false, peakHeatLogged:false,
+    exitLogged:false, entryLogged: mode === "descent" && !ATMO.vac && h0 < ATMO.Hm,
+    orient: mode === "ascent" ? 1 : -1,
+    atm: atm0,
+  };
+  updateReadouts();
+}
+function localG(h){ const Rm = P.radius*1000; return P.g0 * (Rm/(Rm+h))**2; }
+
+function physicsStep(dt){
+  if (S.done) return;
+  const mat  = MATERIALS[$("material").value];
+  const fuel = FUELS[$("fuel").value];
+  const nose = NOSES[$("nose").value];
+  const atm  = atmoAt(S.h);
+  const g    = localG(S.h);
+  const area = Math.PI * (P.dia/2)**2;
+  const throttle = +$("throttle").value / 100;
+
+  // --- propulsion (thrust always acts upward: ascent burn or retro-deceleration)
+  let thrust = 0;
+  S.ispNow = 0;
+  if (S.prop > 0 && throttle > 0 && P.thrust > 0){
+    const ispEff = fuel.ispVac - (fuel.ispVac - fuel.ispSL) * Math.min(atm.P/101325, 1);
+    thrust = throttle * P.thrust * 1000;
+    const mdot = thrust / (ispEff * G_STD);
+    let burn = mdot * dt;
+    if (burn > S.prop){ thrust *= S.prop / burn; burn = S.prop; }
+    S.prop -= burn;
+    S.ispNow = ispEff;
+    if (S.prop <= 0 && !S.meco){ S.meco = true; log("MECO — propellant depleted", "warn"); }
+  }
+  const m = P.drymass*1000 + S.prop;
+
+  // --- aerodynamics
+  const a_snd = soundSpeed(atm.T);
+  S.mach = atm.rho > 0 ? Math.abs(S.v)/a_snd : 0;
+  const qDyn = 0.5 * atm.rho * S.v * S.v;
+  const Cd = dragCoeff(nose, S.mach);
+  const Fd = qDyn * Cd * area * (S.v > 0 ? -1 : 1);
+
+  // --- integrate (semi-implicit Euler)
+  const acc = (thrust + Fd)/m - g;
+  S.v += acc * dt;
+  S.h += S.v * dt;
+  S.t += dt;
+  S.thrustNow = thrust; S.dragNow = Math.abs(Fd);
+  S.accFelt = Math.abs(thrust + Fd)/m / G_STD;
+  S.qNow = qDyn; S.gNow = g; S.atm = atm;
+  if (qDyn > S.maxQ) S.maxQ = qDyn;
+  if (S.h > S.maxH) S.maxH = S.h;
+  if (Math.abs(S.v) > 2) S.orient = Math.sign(S.v);
+
+  // --- stagnation heating: Sutton–Graves + radiative cooling + convective recovery
+  const rn = noseRadius(nose);
+  const qdot = atm.rho > 0 ? SG_K * Math.sqrt(atm.rho/rn) * Math.abs(S.v)**3 : 0;
+  S.qdNow = qdot;
+  if (qdot > S.maxQd) S.maxQd = qdot;
+  const cool = mat.eps * SB * (S.Tn**4 - Math.max(atm.T,3)**4);
+  const conv = atm.rho > 0 ? (10 + 0.3*Math.sqrt(atm.rho)*Math.abs(S.v)) * (atm.T - S.Tn) : 0;
+  const net  = qdot + conv - cool;                       // W/m² into the skin
+  const heatCap = mat.rho * mat.cp * SKIN;               // J/m²K lumped skin
+  if (mat.ablative && !S.ablDead && S.Tn >= T_ABL && net > 0){
+    S.abl -= net * dt / mat.hAbl;                        // kg/m² consumed
+    S.Tn = T_ABL;
+    if (S.abl <= 0){ S.ablDead = true; log("ABLATOR DEPLETED — bare substrate exposed", "bad"); }
+  } else {
+    S.Tn += net * dt / heatCap;
+    if (S.Tn < 3) S.Tn = 3;
+  }
+  const tLimit = S.ablDead ? 1100 : mat.maxT;
+  if (S.Tn > tLimit && !S.failed){
+    S.failed = true; S.done = true;
+    log(`NOSE STRUCTURAL FAILURE at ${Math.round(S.Tn)} K (limit ${tLimit} K)`, "bad");
+    banner("bad", "⚠ VEHICLE LOST ⚠", `nose exceeded material limit at ${(S.h/1000).toFixed(1)} km · ${Math.abs(S.v).toFixed(0)} m/s`);
+    stopRun();
+    return;
+  }
+
+  // --- events
+  if (mode === "ascent" && !S.lifted){
+    if (S.h > 0.5) { S.lifted = true; log("LIFTOFF", "good"); }
+    else if (S.v < 0){ S.v = 0; S.h = 0; }               // sitting on the pad, TWR < 1
+  }
+  if (!ATMO.vac){
+    if (S.v > 0 && !S.exitLogged && S.h > ATMO.Hm){
+      S.exitLogged = true; S.entryLogged = false;
+      log(`ATMOSPHERE DEPARTED at ${(ATMO.Hm/1000).toFixed(0)} km — vacuum flight`);
+    }
+    if (S.v < 0 && !S.entryLogged && S.h < ATMO.Hm){
+      S.entryLogged = true; S.exitLogged = false;
+      log(`ENTRY INTERFACE — ${Math.abs(S.v).toFixed(0)} m/s at ${(S.h/1000).toFixed(1)} km`, "warn");
+    }
+    if (!S.maxQLogged && S.maxQ > 1000 && qDyn < 0.9*S.maxQ){
+      S.maxQLogged = true; log(`MAX-Q ${(S.maxQ/1000).toFixed(1)} kPa`);
+    }
+    if (!S.peakHeatLogged && S.maxQd > 50000 && qdot < 0.8*S.maxQd){
+      S.peakHeatLogged = true; log(`PEAK HEATING ${(S.maxQd/1000).toFixed(0)} kW/m² — nose ${Math.round(S.Tn)} K`, "warn");
+    }
+  }
+  if (S.lifted && !S.apogeeLogged && S.v <= 0 && S.maxH > 10 && mode === "ascent"){
+    S.apogeeLogged = true; log(`APOGEE ${(S.maxH/1000).toFixed(2)} km`, "good");
+  }
+
+  // --- escape check
+  const Rm = P.radius*1000, mu = P.g0*Rm*Rm;
+  const energy = 0.5*S.v*S.v - mu/(Rm+S.h);
+  if (S.v > 0 && energy >= 0 && S.h > Math.max(ATMO.Hm||0, 1e5)*1.5){
+    S.done = true;
+    log(`ESCAPE VELOCITY EXCEEDED — leaving the gravity well at ${S.v.toFixed(0)} m/s`, "good");
+    banner("cyan", "🌌 ESCAPE TRAJECTORY", `specific orbital energy ≥ 0 — this rocket is never coming back`);
+    stopRun();
+    return;
+  }
+
+  // --- touchdown
+  if (S.h <= 0 && S.v <= 0 && S.lifted){
+    const vImp = Math.abs(S.v);
+    S.h = 0; S.done = true;
+    if (vImp <= 8){
+      log(`TOUCHDOWN at ${vImp.toFixed(1)} m/s — SOFT LANDING`, "good");
+      banner("good", "✓ SOFT LANDING", `touchdown velocity ${vImp.toFixed(1)} m/s · nose peaked at ${Math.round(S.TnPeak||S.Tn)} K`);
+    } else {
+      log(`IMPACT at ${vImp.toFixed(0)} m/s — vehicle destroyed`, "bad");
+      banner("bad", "💥 CRASH", `impact at ${vImp.toFixed(0)} m/s (Mach ${S.mach.toFixed(1)})`);
+    }
+    stopRun();
+  }
+  S.TnPeak = Math.max(S.TnPeak||0, S.Tn);
+}
+
+/* ================= RUN CONTROL ================= */
+function startRun(){
+  if (!S || S.done) initState();
+  clearBanner();
+  running = true; paused = false;
+  $("btnPause").disabled = false; $("btnPause").textContent = "PAUSE";
+  $("btnStart").disabled = true;
+  if (mode === "ascent"){
+    const twr0 = P.thrust*1000 / ((P.drymass*1000+P.propmass*1000) * P.g0);
+    log(`IGNITION — TWR ${twr0.toFixed(2)}${twr0 < 1 ? " ⚠ below 1: cannot lift off!" : ""}`, twr0 < 1 ? "warn" : "good");
+  } else {
+    log(`ENTRY SEQUENCE — released at ${P.entryalt} km, ${P.entryvel} m/s downward`);
+  }
+}
+function stopRun(){
+  running = false;
+  $("btnPause").disabled = true;
+  $("btnStart").disabled = false;
+}
+function resetRun(){
+  running = false; paused = false;
+  $("btnPause").disabled = true; $("btnPause").textContent = "PAUSE";
+  $("btnStart").disabled = false;
+  clearBanner();
+  $("log").innerHTML = "";
+  charts.forEach(c => c.reset());
+  initState();
+}
+function setMode(m){
+  mode = m;
+  $("tabAscent").classList.toggle("active", m === "ascent");
+  $("tabDescent").classList.toggle("active", m === "descent");
+  $("entryBox").style.display = m === "descent" ? "" : "none";
+  $("btnStart").textContent = m === "ascent" ? "LAUNCH" : "BEGIN ENTRY";
+  $("throttle").value = m === "ascent" ? 100 : 0;
+  $("throttleVal").textContent = $("throttle").value + "%";
+  resetRun();
+}
+
+/* ================= EVENT LOG & BANNER ================= */
+function log(msg, cls){
+  const d = document.createElement("div");
+  d.className = "ev" + (cls ? " "+cls : "");
+  const t = S ? S.t : 0;
+  const mm = String(Math.floor(t/60)).padStart(2,"0");
+  const ss = (t % 60).toFixed(1).padStart(4,"0");
+  d.innerHTML = `T+${mm}:${ss} <b>${msg}</b>`;
+  $("log").prepend(d);
+}
+function banner(cls, title, sub){
+  const b = $("banner");
+  b.className = "show " + cls;
+  b.innerHTML = title + (sub ? `<small>${sub}</small>` : "");
+}
+function clearBanner(){ $("banner").className = ""; }
+
+/* ================= TELEMETRY READOUTS ================= */
+function fmtAlt(h){
+  return h < 1000 ? h.toFixed(0)+" m" : (h/1000).toFixed(h < 100000 ? 2 : 0)+" km";
+}
+function updateReadouts(){
+  if (!S) return;
+  const mat = MATERIALS[$("material").value];
+  const t = S.t, mm = String(Math.floor(t/60)).padStart(2,"0"), ss = (t%60).toFixed(1).padStart(4,"0");
+  $("roMet").textContent  = `T+ ${mm}:${ss}`;
+  $("roAlt").textContent  = fmtAlt(Math.max(S.h,0));
+  $("roVel").textContent  = (S.v>=0?"▲ ":"▼ ") + Math.abs(S.v).toFixed(S.v<100?1:0) + " m/s";
+  $("roMach").textContent = S.atm.rho > 0 ? S.mach.toFixed(2) : "— (vacuum)";
+  $("roAcc").textContent  = S.accFelt.toFixed(2) + " g";
+  $("roAcc").className    = "v" + (S.accFelt > 8 ? " bad" : S.accFelt > 4 ? " warn" : "");
+  $("roG").textContent    = S.gNow.toFixed(3) + " m/s²";
+  $("roThrust").textContent = (S.thrustNow/1000).toFixed(0) + " kN";
+  const m = P.drymass*1000 + S.prop;
+  $("roTwr").textContent  = S.thrustNow > 0 ? (S.thrustNow/(m*S.gNow)).toFixed(2) : "—";
+  $("roDrag").textContent = (S.dragNow/1000).toFixed(S.dragNow<10000?2:0) + " kN";
+  $("roQ").textContent    = (S.qNow/1000).toFixed(1) + " kPa";
+  $("roIsp").textContent  = S.ispNow > 0 ? S.ispNow.toFixed(0)+" s" : "—";
+  $("roApo").textContent  = S.maxH > 10 ? fmtAlt(S.maxH) : "—";
+  $("roRho").textContent  = S.atm.rho > 0.001 ? S.atm.rho.toFixed(3)+" kg/m³"
+                          : S.atm.rho > 0 ? S.atm.rho.toExponential(2)+" kg/m³" : "0 (vacuum)";
+  $("roPair").textContent = S.atm.P > 100 ? (S.atm.P/1000).toFixed(1)+" kPa"
+                          : S.atm.P > 0 ? S.atm.P.toFixed(2)+" Pa" : "0 Pa";
+  $("roTair").textContent = S.atm.rho > 0 ? S.atm.T.toFixed(0)+" K" : "— K";
+  $("roQdot").textContent = S.qdNow > 1e6 ? (S.qdNow/1e6).toFixed(2)+" MW/m²" : (S.qdNow/1000).toFixed(1)+" kW/m²";
+  $("roQdot").className   = "v" + (S.qdNow > 1e6 ? " bad" : S.qdNow > 1e5 ? " warn" : "");
+  const propFrac = P.propmass > 0 ? S.prop/(P.propmass*1000) : 0;
+  $("propBar").style.width = (propFrac*100).toFixed(1)+"%";
+  $("roPropTxt").textContent = (propFrac*100).toFixed(1)+"% · "+(S.prop/1000).toFixed(2)+" t";
+  const tLimit = S.ablDead ? 1100 : mat.maxT;
+  const tFrac = Math.min(S.Tn/tLimit, 1);
+  $("noseBar").style.width = (tFrac*100).toFixed(1)+"%";
+  $("noseBar").style.background = tFrac > 0.85 ? "var(--red)" : tFrac > 0.6 ? "var(--amber)" : "var(--cyan)";
+  $("roNoseTxt").textContent = Math.round(S.Tn)+" K / limit "+tLimit+" K"
+    + (MATERIALS[$("material").value].ablative && !S.ablDead ? " · ablator "+Math.max(S.abl,0).toFixed(1)+" kg/m²" : "");
+}
+
+/* ================= STRIP CHARTS ================= */
+class Strip {
+  constructor(id, label, color, unit, xform){
+    this.cv = $(id); this.cx = this.cv.getContext("2d");
+    this.label = label; this.color = color; this.unit = unit;
+    this.xform = xform || (v => v);
+    this.reset();
+  }
+  reset(){ this.data = []; this.lastT = -1; this.dt = 0.1; }
+  push(t, v){
+    if (t - this.lastT < this.dt) return;
+    this.lastT = t; this.data.push([t, this.xform(v)]);
+    if (this.data.length > 1400){
+      this.data = this.data.filter((_, i) => i % 2 === 0);
+      this.dt *= 2;
+    }
+  }
+  draw(){
+    const cv = this.cv, cx = this.cx;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== W*devicePixelRatio){ cv.width = W*devicePixelRatio; cv.height = H*devicePixelRatio; }
+    cx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    cx.clearRect(0,0,W,H);
+    cx.font = "9px Consolas,monospace";
+    const d = this.data;
+    if (d.length > 1){
+      let lo = Infinity, hi = -Infinity;
+      for (const [,v] of d){ if (v<lo) lo=v; if (v>hi) hi=v; }
+      if (hi - lo < 1e-9){ hi += 1; lo -= 1; }
+      const pad = (hi-lo)*0.1; lo -= pad; hi += pad;
+      const t0 = d[0][0], t1 = d[d.length-1][0], tw = Math.max(t1-t0, 1e-9);
+      cx.strokeStyle = this.color; cx.lineWidth = 1.2; cx.beginPath();
+      for (let i = 0; i < d.length; i++){
+        const x = 4 + (d[i][0]-t0)/tw * (W-8);
+        const y = H-6 - (d[i][1]-lo)/(hi-lo) * (H-16);
+        i ? cx.lineTo(x,y) : cx.moveTo(x,y);
+      }
+      cx.stroke();
+      cx.fillStyle = "#66738c";
+      cx.fillText(hi >= 1000 ? hi.toFixed(0) : hi.toPrecision(3), 4, 9);
+      const cur = d[d.length-1][1];
+      cx.fillStyle = this.color;
+      const txt = (cur >= 1000 ? cur.toFixed(0) : Math.abs(cur) < 0.01 && cur !== 0 ? cur.toExponential(1) : cur.toPrecision(3)) + " " + this.unit;
+      cx.fillText(txt, W - cx.measureText(txt).width - 4, 9);
+    }
+    cx.fillStyle = "#66738c";
+    cx.fillText(this.label, 4, H-3);
+  }
+}
+let charts = [];
+
+/* ================= RENDERER ================= */
+const cvs = $("sim"), ctx = cvs.getContext("2d");
+let camScale = 3, stars = [];
+for (let i = 0; i < 170; i++) stars.push([Math.random(), Math.random(), Math.random()*1.4+0.4]);
+
+function lerpColor(c1, c2, f){
+  f = Math.min(1, Math.max(0, f));
+  return `rgb(${Math.round(c1[0]+(c2[0]-c1[0])*f)},${Math.round(c1[1]+(c2[1]-c1[1])*f)},${Math.round(c1[2]+(c2[2]-c1[2])*f)})`;
+}
+const SPACE_C = [2,3,12], SKY_C = [92,150,205];
+
+function airFactor(h){
+  if (ATMO.vac || !ATMO.rho0) return 0;
+  const a = atmoAt(h);
+  return Math.pow(Math.min(a.rho/ATMO.rho0, 1), 0.35) * Math.min(ATMO.rho0/1.0, 1);
+}
+
+function niceStep(raw){
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const m = raw / p;
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p;
+}
+
+function render(){
+  const W = cvs.clientWidth, H = cvs.clientHeight;
+  if (cvs.width !== W*devicePixelRatio){ cvs.width = W*devicePixelRatio; cvs.height = H*devicePixelRatio; }
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  if (!S){ ctx.clearRect(0,0,W,H); return; }
+
+  // camera: keep ~2.5 s of travel on screen; smooth zoom
+  const targetScale = Math.min(4, Math.max(2e-4, H*0.28 / Math.max(40, Math.abs(S.v)*2.5)));
+  camScale += (targetScale - camScale) * 0.06;
+  const rocketY = H * 0.42;
+  const camBottom = S.h - (H - rocketY)/camScale;
+  const yOf = h => H - (h - camBottom)*camScale;
+
+  // sky gradient by local air density
+  const fTop = airFactor(camBottom + H/camScale), fBot = airFactor(Math.max(camBottom,0));
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, lerpColor(SPACE_C, SKY_C, fTop));
+  grad.addColorStop(1, lerpColor(SPACE_C, SKY_C, fBot));
+  ctx.fillStyle = grad; ctx.fillRect(0,0,W,H);
+
+  // stars fade in as air thins
+  const fMid = airFactor(S.h);
+  if (fMid < 0.75){
+    ctx.fillStyle = `rgba(255,255,255,${(0.9*(1-fMid)).toFixed(2)})`;
+    for (const [sx, sy, ss] of stars){
+      const y = ((sy*H*3 + camBottom*camScale*0.05) % (H+20));
+      ctx.fillRect(sx*W, y, ss, ss);
+    }
+  }
+
+  // atmosphere edge line
+  if (!ATMO.vac){
+    const ye = yOf(ATMO.Hm);
+    if (ye > -20 && ye < H+20){
+      ctx.strokeStyle = "rgba(79,209,255,0.4)"; ctx.setLineDash([6,6]);
+      ctx.beginPath(); ctx.moveTo(0,ye); ctx.lineTo(W,ye); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(79,209,255,0.6)"; ctx.font = "10px Consolas,monospace";
+      ctx.fillText("ATMOSPHERE EDGE " + (ATMO.Hm/1000).toFixed(0) + " km", 8, ye-5);
+    }
+  }
+  // apogee marker
+  if (S.maxH > 100 && S.apogeeLogged){
+    const ya = yOf(S.maxH);
+    if (ya > -20 && ya < H+20){
+      ctx.strokeStyle = "rgba(93,255,163,0.35)"; ctx.setLineDash([3,7]);
+      ctx.beginPath(); ctx.moveTo(0,ya); ctx.lineTo(W,ya); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(93,255,163,0.6)"; ctx.font = "10px Consolas,monospace";
+      ctx.fillText("APOGEE " + fmtAlt(S.maxH), 8, ya+12);
+    }
+  }
+
+  // altitude ruler
+  const span = H/camScale;
+  const step = niceStep(span/6);
+  ctx.font = "10px Consolas,monospace";
+  for (let hh = Math.max(0, Math.ceil(camBottom/step)*step); hh < camBottom+span; hh += step){
+    const y = yOf(hh);
+    ctx.strokeStyle = "rgba(120,140,180,0.13)";
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    ctx.fillStyle = "rgba(120,140,180,0.5)";
+    ctx.fillText(hh >= 1000 ? (hh/1000)+" km" : hh+" m", W-64, y-3);
+  }
+
+  // ground
+  const yg = yOf(0);
+  if (yg < H+80){
+    const gg = ctx.createLinearGradient(0,yg,0,Math.max(yg+120,H));
+    gg.addColorStop(0,"#20301c"); gg.addColorStop(1,"#0c1409");
+    ctx.fillStyle = gg; ctx.fillRect(0,yg,W,Math.max(H-yg,0)+80);
+    ctx.fillStyle = "#3a4550";                                 // launch pad
+    ctx.fillRect(W/2-46, yg-4, 92, 4);
+    ctx.fillStyle = "#232c38";
+    ctx.fillRect(W/2+34, yg-56, 7, 52);                        // tower
+    for (let i = 1; i < 5; i++){ ctx.fillRect(W/2+30, yg-i*11, 15, 2); }
+  }
+
+  drawRocket(W/2, rocketY);
+  drawHud(W, H);
+}
+
+function drawRocket(px, py){
+  const nose = NOSES[$("nose").value];
+  const fuel = FUELS[$("fuel").value];
+  const throttle = running && !paused ? +$("throttle").value/100 : (+$("throttle").value/100);
+  const thrusting = S.thrustNow > 0;
+  const BW = 17, BL = 62, NL = nose === NOSES.sphere ? BW/2 : nose === NOSES.flat ? 5 : 20;
+
+  ctx.save();
+  ctx.translate(px, py);
+  if (S.orient < 0) ctx.rotate(Math.PI);
+
+  // heating glow at the nose (leading point, local -y)
+  if (S.qdNow > 3e4){
+    const inten = Math.min(1, Math.log10(S.qdNow/3e4)/2.5);
+    const gr = ctx.createRadialGradient(0,-BL/2,2, 0,-BL/2, 46+inten*60);
+    gr.addColorStop(0, `rgba(255,${Math.round(240-inten*90)},${Math.round(190-inten*160)},${(0.85*inten+0.1).toFixed(2)})`);
+    gr.addColorStop(1, "rgba(255,120,30,0)");
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(0,-BL/2, 46+inten*60, 0, 7); ctx.fill();
+    // plasma streaks trailing behind (local +y)
+    ctx.strokeStyle = `rgba(255,170,60,${(0.5*inten).toFixed(2)})`;
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 7; i++){
+      const x0 = -BW*1.4 + Math.random()*BW*2.8;
+      ctx.beginPath(); ctx.moveTo(x0, -BL/2 + Math.random()*10);
+      ctx.lineTo(x0*1.8, BL*(0.7+Math.random()*0.9)); ctx.stroke();
+    }
+  }
+
+  // main engine flame (tail, local +y) — only when thrust acts along nose direction (ascending)
+  if (thrusting && S.orient > 0){
+    const fl = (22 + 66*throttle) * (1 + 0.7*(1 - Math.min(S.atm.P/101325,1))) * (0.9+Math.random()*0.2);
+    const fw = BW*0.72 * (1 + 0.9*(1 - Math.min(S.atm.P/101325,1)));
+    const fg = ctx.createLinearGradient(0, BL/2, 0, BL/2+fl);
+    fg.addColorStop(0, "#fff7dd"); fg.addColorStop(0.35, fuel.color); fg.addColorStop(1, "rgba(255,80,20,0)");
+    ctx.fillStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-fw/2, BL/2); ctx.quadraticCurveTo(-fw*0.62, BL/2+fl*0.5, 0, BL/2+fl);
+    ctx.quadraticCurveTo(fw*0.62, BL/2+fl*0.5, fw/2, BL/2); ctx.closePath(); ctx.fill();
+  }
+  // retro plumes when decelerating a fall (thrust up while nose-down): plumes ahead of the nose
+  if (thrusting && S.orient < 0){
+    const fl = 16 + 40*throttle;
+    ctx.fillStyle = fuel.color + "cc";
+    for (const sx of [-BW*0.75, BW*0.75]){
+      ctx.beginPath();
+      ctx.moveTo(sx*0.55, -BL/2+6);
+      ctx.lineTo(sx - 3, -BL/2 - fl*(0.85+Math.random()*0.3));
+      ctx.lineTo(sx + 3, -BL/2 - fl*(0.85+Math.random()*0.3));
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // body
+  const bg = ctx.createLinearGradient(-BW/2,0,BW/2,0);
+  bg.addColorStop(0,"#8d99ab"); bg.addColorStop(0.5,"#e6ecf4"); bg.addColorStop(1,"#6b7686");
+  ctx.fillStyle = bg;
+  ctx.fillRect(-BW/2, -BL/2+NL, BW, BL-NL);
+  // fins
+  ctx.fillStyle = "#4a5568";
+  ctx.beginPath(); ctx.moveTo(-BW/2, BL/2-16); ctx.lineTo(-BW/2-9, BL/2+2); ctx.lineTo(-BW/2, BL/2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(BW/2, BL/2-16); ctx.lineTo(BW/2+9, BL/2+2); ctx.lineTo(BW/2, BL/2); ctx.closePath(); ctx.fill();
+  // engine bell
+  ctx.fillStyle = "#39424e";
+  ctx.beginPath(); ctx.moveTo(-BW*0.3, BL/2); ctx.lineTo(-BW*0.44, BL/2+7); ctx.lineTo(BW*0.44, BL/2+7); ctx.lineTo(BW*0.3, BL/2); ctx.closePath(); ctx.fill();
+
+  // nose — colour shifts with temperature (incipient glow above ~650 K)
+  const tGlow = Math.min(1, Math.max(0, (S.Tn-650)/1600));
+  const noseCol = tGlow <= 0 ? "#aeb8c6"
+    : lerpColor([174,184,198].map((c,i)=>c), tGlow < 0.5 ? [255,90,40] : [255,220,160], Math.min(tGlow*1.6,1));
+  ctx.fillStyle = noseCol;
+  ctx.beginPath();
+  const nk = $("nose").value, yb = -BL/2+NL, yt = -BL/2;
+  if (nk === "cone"){ ctx.moveTo(-BW/2, yb); ctx.lineTo(0, yt); ctx.lineTo(BW/2, yb); }
+  else if (nk === "ogive"){ ctx.moveTo(-BW/2, yb); ctx.quadraticCurveTo(-BW*0.42, yt+2, 0, yt); ctx.quadraticCurveTo(BW*0.42, yt+2, BW/2, yb); }
+  else if (nk === "para"){ ctx.moveTo(-BW/2, yb); ctx.quadraticCurveTo(-BW*0.25, yt-1, 0, yt); ctx.quadraticCurveTo(BW*0.25, yt-1, BW/2, yb); }
+  else if (nk === "sphere"){ ctx.arc(0, yb, BW/2, Math.PI, 0); }
+  else { ctx.rect(-BW/2, yt, BW, NL); }
+  ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHud(W, H){
+  ctx.font = "12px Consolas,monospace";
+  ctx.fillStyle = "rgba(79,209,255,0.85)";
+  const mm = String(Math.floor(S.t/60)).padStart(2,"0"), ss = (S.t%60).toFixed(1).padStart(4,"0");
+  ctx.fillText(`T+${mm}:${ss}`, 10, 20);
+  ctx.fillText(`ALT ${fmtAlt(Math.max(S.h,0))}`, 10, 36);
+  ctx.fillText(`VEL ${(S.v>=0?"▲":"▼")} ${Math.abs(S.v).toFixed(0)} m/s`, 10, 52);
+  if (S.atm.rho > 0) ctx.fillText(`MACH ${S.mach.toFixed(2)}`, 10, 68);
+  if (paused){
+    ctx.fillStyle = "rgba(255,180,84,0.9)"; ctx.font = "16px Consolas,monospace";
+    ctx.fillText("‖ PAUSED", W/2-38, 24);
+  }
+}
+
+/* ================= MAIN LOOP =================
+   Physics runs on a wall-clock interval (keeps ticking even when the tab is
+   background-throttled); rendering runs on requestAnimationFrame. */
+let lastTick = performance.now(), simAccum = 0;
+function pushCharts(){
+  charts[0].push(S.t, S.h/1000);
+  charts[1].push(S.t, S.v);
+  charts[2].push(S.t, S.mach);
+  charts[3].push(S.t, S.Tn);
+  charts[4].push(S.t, S.qNow/1000);
+}
+function tick(){
+  const now = performance.now();
+  const elapsed = Math.min((now - lastTick)/1000, 0.25);
+  lastTick = now;
+  if (running && !paused && S && !S.done){
+    const warp = +$("warp").value;
+    simAccum += elapsed * warp;
+    let steps = Math.min(Math.floor(simAccum/DT), 8000);
+    simAccum -= steps * DT;
+    while (steps-- > 0 && !S.done) physicsStep(DT);
+    pushCharts();
+    updateReadouts();
+  }
+}
+setInterval(tick, 16);
+function frame(){
+  render();
+  for (const c of charts) c.draw();
+  requestAnimationFrame(frame);
+}
+
+/* ================= WIRE-UP ================= */
+buildControls();
+buildAtmo();
+initState();
+charts = [
+  new Strip("chAlt",  "ALTITUDE",     "#4fd1ff", "km"),
+  new Strip("chVel",  "VELOCITY",     "#5dffa3", "m/s"),
+  new Strip("chMach", "MACH",         "#b48cff", "M"),
+  new Strip("chNose", "NOSE TEMP",    "#ffb454", "K"),
+  new Strip("chQ",    "DYN PRESSURE", "#ff8c66", "kPa"),
+];
+$("btnStart").addEventListener("click", startRun);
+$("btnPause").addEventListener("click", () => {
+  paused = !paused; $("btnPause").textContent = paused ? "RESUME" : "PAUSE";
+});
+$("btnReset").addEventListener("click", resetRun);
+$("tabAscent").addEventListener("click", () => setMode("ascent"));
+$("tabDescent").addEventListener("click", () => setMode("descent"));
+$("throttle").addEventListener("input", () => $("throttleVal").textContent = $("throttle").value + "%");
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space"){ e.preventDefault(); if (running){ paused = !paused; $("btnPause").textContent = paused?"RESUME":"PAUSE"; } }
+  if (e.key === "r" || e.key === "R") resetRun();
+  if (e.key === "ArrowUp"){ e.preventDefault(); const th=$("throttle"); th.value = Math.min(100, +th.value+5); th.dispatchEvent(new Event("input")); }
+  if (e.key === "ArrowDown"){ e.preventDefault(); const th=$("throttle"); th.value = Math.max(0, +th.value-5); th.dispatchEvent(new Event("input")); }
+});
+requestAnimationFrame(frame);
+
+// debug/verification hook
+window.__ROCKET = {
+  get S(){ return S }, get P(){ return P }, get mode(){ return mode },
+  get running(){ return running }, get atmo(){ return ATMO },
+  start: startRun, reset: resetRun, setMode, atmoAt,
+  // synchronously advance the simulation by `sec` seconds (testing/automation)
+  step(sec){
+    if (!S) initState();
+    let n = Math.min(Math.round(sec/DT), 5e5);
+    while (n-- > 0 && !S.done) physicsStep(DT);
+    pushCharts(); updateReadouts();
+    return { t:S.t, h:S.h, v:S.v, mach:S.mach, Tn:S.Tn, prop:S.prop,
+             maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
+  },
+};
+</script>
+</body>
+</html>
