@@ -12,7 +12,7 @@ A single-file, zero-dependency web simulator of a rocket **ascending from** or *
 | Mode | What happens |
 |---|---|
 | **▲ ASCENT** | Ignition on the pad → Max-Q → MECO → apogee. If the rocket isn't fast enough to escape, it falls back and re-enters — the full flight is simulated, including the return heating. |
-| **▼ DESCENT / RE-ENTRY** | Released nose-first at your chosen entry altitude and speed. Ride the plasma, then use the throttle as **retro-thrust** for a propulsive landing burn. Touch down under 8 m/s for a soft landing. |
+| **▼ DESCENT / RE-ENTRY** | Released nose-first at your chosen entry altitude and speed. Ride the plasma, then land under **parachutes**, a **retro-propulsive burn**, or both. Touch down under 10 m/s for a soft landing. |
 
 ## What you can configure
 
@@ -25,6 +25,7 @@ A single-file, zero-dependency web simulator of a rocket **ascending from** or *
   conical · ogive · parabolic · spherical-blunt · flat
 - **Nose material** (thermal mass, emissivity, failure temperature):
   Aluminium 2024 · Ti-6Al-4V · Stainless 310 · Inconel X-750 · Carbon-Carbon · **PICA ablative** (consumes ablator stock above 2900 K)
+- **Recovery system** — drogue + main parachute areas and main-deploy altitude. The drogue auto-deploys once falling below Mach 1.6 with q < 40 kPa; the main releases below your set altitude under 150 m/s. Works in both modes, so sounding rockets get recovered too.
 
 Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat flux, nose temperature vs material limit, effective Isp, TWR, local air ρ/P/T — plus strip-chart graphs and a time-stamped flight event log (LIFTOFF, MAX-Q, MECO, APOGEE, ENTRY INTERFACE, PEAK HEATING, TOUCHDOWN / CRASH / ESCAPE / VEHICLE LOST).
 
@@ -40,15 +41,21 @@ Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat fl
 | Nose thermal balance | Lumped skin: heat in (q̇ + convection) minus radiative cooling εσ(T⁴ − T_air⁴); exceed the material limit and the vehicle is lost |
 | Ablation | PICA holds ~2900 K while sacrificing ablator mass (q̇/h_abl); run out and the bare substrate fails fast |
 | Propulsion | Effective Isp blends vacuum ↔ sea-level values with ambient pressure; propellant drains at ṁ = F/(Isp·g₀); MECO when dry |
+| Parachutes | Drogue (C_d 0.9) and ringsail main (C_d 1.75) with timed inflation ramps that limit opening shock; deployment gated by Mach and dynamic pressure like real recovery sequencers |
 | Escape | Flags an escape trajectory when specific orbital energy v²/2 − μ/(R+h) ≥ 0 outside the atmosphere |
 | Integration | Semi-implicit Euler at 100 Hz with time-warp 0.5×–50×; physics on a wall-clock timer so background tabs don't freeze the flight |
 
 The Earth preset reproduces the US Standard Atmosphere closely (10 km: 223 K, 26.4 kPa, 0.413 kg/m³ vs the standard's 223.3 K, 26.5 kPa, 0.414 kg/m³).
 
+## Visuals
+
+The scene is rendered live on canvas: re-entry bow shock with a shape-dependent standoff distance, plasma envelope and incandescent wake, engine plumes that expand as ambient pressure drops (with shock diamonds in dense air), transonic vapour cone at Mach 1, pad steam and exhaust smoke particles, clouds and parallax star layers, sun that sharpens from a hazy disc to a hard point as you leave the air, a full launch complex (strongback, lightning masts, hangar, tank farm), camera shake at liftoff and max-q, parachute canopies with gores and inflation sway, and explosions with debris when things go wrong.
+
 ## Things to try
 
 1. **Why capsules are blunt** — re-enter at 3 km/s with a *conical* aluminium nose (vehicle lost in seconds), then switch to *spherical* + PICA and watch peak heat flux drop by an order of magnitude.
-2. **Suicide burn** — descent mode, 4 m blunt body, ~2 t of propellant: coast through entry heating, then throttle up below ~3 km and try to touch down under 8 m/s.
+2. **Suicide burn** — descent mode, 4 m blunt body, ~2 t of propellant: coast through entry heating, then throttle up below ~3 km and try to touch down under 10 m/s.
+3. **Capsule recovery** — 4 m spherical nose + PICA, no propellant at all: entry at 3 km/s → drogue at ~16 km → main at 2.5 km → 7.5 m/s splat-free touchdown, exactly like a real capsule sequence.
 3. **Moon hop** — Moon preset: no drag, no Max-Q, no heating, and a TWR of 12 on the same rocket. Escape velocity comes embarrassingly quickly.
 4. **Venus is hell** — 92 bar and 737 K at the surface. Watch what the atmosphere does to your ascent.
 5. **Throttle discipline** — full throttle from the pad melts an aluminium nose in the dense lower atmosphere; real rockets throttle down through Max-Q for a reason.
