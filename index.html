@@ -151,6 +151,13 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
       <div class="note" id="fuelNote"></div>
     </div></details>
 
+    <details open><summary>STAGING</summary><div class="body">
+      <label class="chk"><input type="checkbox" id="stagingOn"> Two-stage vehicle</label>
+      <div id="grp-stage2"></div>
+      <div class="selrow"><label>Stage 2 propellant</label><select id="fuel2"></select></div>
+      <div class="note" id="dvNote"></div>
+    </div></details>
+
     <details open><summary>NOSE &amp; THERMAL PROTECTION</summary><div class="body">
       <div class="selrow"><label>Nose shape</label><select id="nose"></select></div>
       <div class="note" id="noseNote"></div>
@@ -293,6 +300,9 @@ const PARAM_DEFS = [
   {id:"dia",     g:"rocket", label:"Body diameter",      unit:"m",      min:0.3, max:12,    step:0.1,  val:1.8},
   {id:"entryalt",g:"entry",  label:"Entry altitude",     unit:"km",     min:1,   max:2000,  step:1,    val:120},
   {id:"entryvel",g:"entry",  label:"Entry speed (down)", unit:"m/s",    min:0,   max:12000, step:50,   val:3000},
+  {id:"s2drymass", g:"stage2",label:"S2 dry mass",       unit:"t",      min:0.05,max:100,   step:0.05, val:0.8},
+  {id:"s2propmass",g:"stage2",label:"S2 propellant",     unit:"t",      min:0,   max:300,   step:0.1,  val:2.5},
+  {id:"s2thrust",  g:"stage2",label:"S2 thrust",         unit:"kN",     min:0,   max:5000,  step:5,    val:60},
   {id:"chutedrogue",g:"chute",label:"Drogue chute area", unit:"m²",     min:0,   max:60,    step:1,    val:8},
   {id:"chutemain",g:"chute", label:"Main chute area",    unit:"m²",     min:0,   max:2000,  step:10,   val:400},
   {id:"chutealt", g:"chute", label:"Main deploy altitude",unit:"km",    min:0.2, max:30,    step:0.1,  val:2.5},
@@ -325,9 +335,12 @@ function buildControls(){
     nm.addEventListener("change", () => set(nm.value));
   }
   fillSelect("fuel", FUELS, "kerolox");
+  fillSelect("fuel2", FUELS, "hydrolox");
   fillSelect("nose", NOSES, "ogive");
   fillSelect("material", MATERIALS, "aluminum");
   $("fuel").addEventListener("change", refreshNotes);
+  $("fuel2").addEventListener("change", refreshNotes);
+  $("stagingOn").addEventListener("change", refreshNotes);
   $("nose").addEventListener("change", refreshNotes);
   $("material").addEventListener("change", refreshNotes);
   $("preset").addEventListener("change", applyPreset);
@@ -360,6 +373,7 @@ function onParamChange(d){
     $("preset").value = "custom";
     buildAtmo();
   }
+  if (d.g === "rocket" || d.g === "stage2") updateDvNote();
   if (!running) initState();
 }
 function refreshNotes(){
@@ -367,7 +381,24 @@ function refreshNotes(){
   $("fuelNote").innerHTML = `<b>Isp ${f.ispSL}s SL / ${f.ispVac}s vac.</b> ${f.info}`;
   $("noseNote").innerHTML = `<b>Cd₀ ${n.cd0} · nose radius ${noseRadius(n).toFixed(2)} m.</b> ${n.info}`;
   $("matNote").innerHTML  = `<b>Fails at ${m.maxT} K${m.ablative ? " (ablates from "+T_ABL+" K)" : ""}.</b> ${m.info}`;
+  updateDvNote();
   if (!running) initState();
+}
+function updateDvNote(){
+  const st2 = $("stagingOn").checked;
+  const f1 = FUELS[$("fuel").value], f2 = FUELS[$("fuel2").value];
+  const s2m = st2 ? (P.s2drymass + P.s2propmass)*1000 : 0;
+  const m0 = (P.drymass + P.propmass)*1000 + s2m;
+  const m1 = P.drymass*1000 + s2m;
+  const dv1 = f1.ispVac*G_STD*Math.log(m0/m1);
+  let tot = dv1;
+  let txt = `Ideal Δv (vac): S1 ${(dv1/1000).toFixed(2)}`;
+  if (st2 && P.s2drymass > 0){
+    const dv2 = f2.ispVac*G_STD*Math.log((P.s2drymass + P.s2propmass)/P.s2drymass);
+    tot += dv2;
+    txt += ` + S2 ${(dv2/1000).toFixed(2)}`;
+  }
+  $("dvNote").innerHTML = `<b>${txt} = ${(tot/1000).toFixed(2)} km/s.</b> LEO needs ~9.4 km/s from Earth incl. losses.`;
 }
 function noseRadius(n){
   return n.rnFrac ? Math.max(0.05, n.rnFrac * P.dia/2) : n.rn;
@@ -437,6 +468,7 @@ function initState(){
     t:0, h:h0,
     v: mode === "ascent" ? 0 : -P.entryvel,
     prop: P.propmass * 1000,
+    stage:1, prop2: P.s2propmass * 1000, sepStarted:false, sepAt:0, ign2:false,
     Tn: Math.max(atm0.T, mode === "ascent" ? P.t0 : 220),
     abl: mat.ablative ? mat.ablStock : 0, ablDead:false,
     maxH:h0, maxQ:0, maxQd:0, qNow:0, qdNow:0, mach:0,
@@ -466,19 +498,40 @@ function physicsStep(dt){
   const throttle = +$("throttle").value / 100;
 
   // --- propulsion (thrust always acts upward: ascent burn or retro-deceleration)
+  // Optional two-stage stack: burnout → 0.7 s → jettison → 1.4 s → stage-2 ignition
+  const st2on = $("stagingOn").checked && mode !== "descent";
+  if (st2on && S.stage === 1 && S.prop <= 0 && !S.sepStarted){
+    S.sepStarted = true; S.sepAt = S.t;
+    log("MECO — booster burnout", "warn");
+  }
+  if (S.sepStarted && S.stage === 1 && S.t >= S.sepAt + 0.7){
+    S.stage = 2; spawnBooster();
+    log("STAGE SEPARATION — booster jettisoned", "good");
+  }
+  const sepCoast = S.sepStarted && S.t < S.sepAt + 1.4;
+  const stageFuel = S.stage === 2 ? FUELS[$("fuel2").value] : fuel;
+  const stageMax = (S.stage === 2 ? P.s2thrust : P.thrust) * 1000;
+  const propNow = S.stage === 2 ? S.prop2 : S.prop;
   let thrust = 0;
   S.ispNow = 0;
-  if (S.prop > 0 && throttle > 0 && P.thrust > 0){
-    const ispEff = fuel.ispVac - (fuel.ispVac - fuel.ispSL) * Math.min(atm.P/101325, 1);
-    thrust = throttle * P.thrust * 1000;
+  if (propNow > 0 && throttle > 0 && stageMax > 0 && !sepCoast){
+    if (S.stage === 2 && !S.ign2){ S.ign2 = true; log("STAGE 2 IGNITION", "good"); }
+    const ispEff = stageFuel.ispVac - (stageFuel.ispVac - stageFuel.ispSL) * Math.min(atm.P/101325, 1);
+    thrust = throttle * stageMax;
     const mdot = thrust / (ispEff * G_STD);
     let burn = mdot * dt;
-    if (burn > S.prop){ thrust *= S.prop / burn; burn = S.prop; }
-    S.prop -= burn;
+    if (burn > propNow){ thrust *= propNow / burn; burn = propNow; }
+    if (S.stage === 2) S.prop2 -= burn; else S.prop -= burn;
     S.ispNow = ispEff;
-    if (S.prop <= 0 && !S.meco){ S.meco = true; log("MECO — propellant depleted", "warn"); }
+    const left = S.stage === 2 ? S.prop2 : S.prop;
+    if (left <= 0 && !S.meco && !(st2on && S.stage === 1)){
+      S.meco = true;
+      log(S.stage === 2 ? "SECO — second stage cutoff" : "MECO — propellant depleted", "warn");
+    }
   }
-  const m = P.drymass*1000 + S.prop;
+  const m = S.stage === 2
+    ? P.s2drymass*1000 + S.prop2
+    : P.drymass*1000 + S.prop + (st2on ? P.s2drymass*1000 + S.prop2 : 0);
 
   // --- aerodynamics
   const a_snd = soundSpeed(atm.T);
@@ -621,7 +674,9 @@ function startRun(){
   $("btnPause").disabled = false; $("btnPause").textContent = "PAUSE";
   $("btnStart").disabled = true;
   if (mode === "ascent"){
-    const twr0 = P.thrust*1000 / ((P.drymass*1000+P.propmass*1000) * P.g0);
+    const stack = (P.drymass + P.propmass
+      + ($("stagingOn").checked ? P.s2drymass + P.s2propmass : 0)) * 1000;
+    const twr0 = P.thrust*1000 / (stack * P.g0);
     log(`IGNITION — TWR ${twr0.toFixed(2)}${twr0 < 1 ? " ⚠ below 1: cannot lift off!" : ""}`, twr0 < 1 ? "warn" : "good");
   } else {
     log(`ENTRY SEQUENCE — released at ${P.entryalt} km, ${P.entryvel} m/s downward`);
@@ -687,7 +742,10 @@ function updateReadouts(){
   $("roAcc").className    = "v" + (S.accFelt > 8 ? " bad" : S.accFelt > 4 ? " warn" : "");
   $("roG").textContent    = S.gNow.toFixed(3) + " m/s²";
   $("roThrust").textContent = (S.thrustNow/1000).toFixed(0) + " kN";
-  const m = P.drymass*1000 + S.prop;
+  const st2onR = $("stagingOn").checked && mode !== "descent";
+  const m = S.stage === 2
+    ? P.s2drymass*1000 + S.prop2
+    : P.drymass*1000 + S.prop + (st2onR ? P.s2drymass*1000 + S.prop2 : 0);
   $("roTwr").textContent  = S.thrustNow > 0 ? (S.thrustNow/(m*S.gNow)).toFixed(2) : "—";
   $("roDrag").textContent = (S.dragNow/1000).toFixed(S.dragNow<10000?2:0) + " kN";
   $("roQ").textContent    = (S.qNow/1000).toFixed(1) + " kPa";
@@ -700,9 +758,12 @@ function updateReadouts(){
   $("roTair").textContent = S.atm.rho > 0 ? S.atm.T.toFixed(0)+" K" : "— K";
   $("roQdot").textContent = S.qdNow > 1e6 ? (S.qdNow/1e6).toFixed(2)+" MW/m²" : (S.qdNow/1000).toFixed(1)+" kW/m²";
   $("roQdot").className   = "v" + (S.qdNow > 1e6 ? " bad" : S.qdNow > 1e5 ? " warn" : "");
-  const propFrac = P.propmass > 0 ? S.prop/(P.propmass*1000) : 0;
+  const propCap = (S.stage === 2 ? P.s2propmass : P.propmass)*1000;
+  const propCur = S.stage === 2 ? S.prop2 : S.prop;
+  const propFrac = propCap > 0 ? propCur/propCap : 0;
   $("propBar").style.width = (propFrac*100).toFixed(1)+"%";
-  $("roPropTxt").textContent = (propFrac*100).toFixed(1)+"% · "+(S.prop/1000).toFixed(2)+" t";
+  $("roPropTxt").textContent = (st2onR ? "S"+S.stage+" · " : "")
+    + (propFrac*100).toFixed(1)+"% · "+(propCur/1000).toFixed(2)+" t";
   const tLimit = S.ablDead ? 1100 : mat.maxT;
   const tFrac = Math.min(S.Tn/tLimit, 1);
   $("noseBar").style.width = (tFrac*100).toFixed(1)+"%";
@@ -841,6 +902,13 @@ function spawnDust(){
                    vh:2+Math.random()*7, life:1.6+Math.random()*1.4, size:5+Math.random()*9});
   }
 }
+function spawnBooster(){
+  spawn("booster", {x:0, h:S.h, vx:(Math.random()<0.5?-1:1)*(6+Math.random()*9), vh:S.v-15,
+                    life:18, size:1, rot:0, rotV:(Math.random()-0.5)*1.6});
+  for (let i = 0; i < 8; i++)   // separation puff
+    spawn("steam", {x:(Math.random()-0.5)*16, h:S.h, vx:(Math.random()-0.5)*46,
+                    vh:(Math.random()-0.5)*24, life:0.7+Math.random()*0.6, size:4+Math.random()*7});
+}
 function updateVisuals(dt){
   shake = Math.max(0, shake - dt*6);
   if (S && running && !paused && !S.done){
@@ -883,6 +951,10 @@ function updateVisuals(dt){
       p.vh -= 25*dt; p.rot += dt*4;
       if (p.h <= 0){ particles.splice(i,1); continue; }
     }
+    if (p.type === "booster"){
+      p.vh -= 9.8*dt; p.rot += p.rotV*dt;
+      if (p.h <= 0){ particles.splice(i,1); continue; }
+    }
     if (p.type === "smoke" || p.type === "steam"){ p.vx *= (1-0.5*dt); p.vh *= (1-0.4*dt); }
   }
 }
@@ -918,6 +990,18 @@ function drawParticlesLayer(W, H, yOf){
       ctx.strokeStyle = `rgba(255,${Math.round(120+90*f)},60,${(0.6*f).toFixed(2)})`;
       ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + p.vx*0.1, y + p.dy); ctx.stroke();
+    } else if (p.type === "booster"){
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p.rot);
+      ctx.globalAlpha = Math.min(1, f*3);
+      const g = ctx.createLinearGradient(-4, 0, 4, 0);
+      g.addColorStop(0, "#6d7889"); g.addColorStop(0.5, "#c9d2dd"); g.addColorStop(1, "#525c6b");
+      ctx.fillStyle = g; ctx.fillRect(-4, -15, 8, 30);
+      ctx.fillStyle = "#141a24"; ctx.fillRect(-4, -15, 8, 4);      // scorched interstage
+      ctx.fillStyle = "#39424e";
+      ctx.beginPath(); ctx.moveTo(-4, 15); ctx.lineTo(-7, 20); ctx.lineTo(-4, 20); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4, 15); ctx.lineTo(7, 20); ctx.lineTo(4, 20); ctx.closePath(); ctx.fill();
+      ctx.fillRect(-2.5, 15, 5, 3);                                // spent engine bell
+      ctx.restore(); ctx.globalAlpha = 1;
     }
   }
 }
@@ -1139,10 +1223,12 @@ function drawChutes(px, py){
 
 function drawRocket(px, py){
   const nose = NOSES[$("nose").value];
-  const fuel = FUELS[$("fuel").value];
+  const staged = S.stage === 2;
+  const fuel = FUELS[$(staged ? "fuel2" : "fuel").value];
   const nk = $("nose").value;
-  const thr = P.thrust > 0 ? S.thrustNow/(P.thrust*1000) : 0;
-  const BW = 20, BL = 76;
+  const stageMax = (staged ? P.s2thrust : P.thrust)*1000;
+  const thr = stageMax > 0 ? S.thrustNow/stageMax : 0;
+  const BW = staged ? 16 : 20, BL = staged ? 54 : 76;
   const NL = nk === "sphere" ? BW/2 : nk === "flat" ? 6 : 24;
   const vac = 1 - Math.min(S.atm.P/101325, 1);      // 0 at sea level → 1 in vacuum
 
@@ -1263,7 +1349,7 @@ function drawRocket(px, py){
   }
   ctx.fillStyle = "#141a24"; ctx.fillRect(-BW/2, yb+3, BW, 6);
   ctx.fillStyle = "rgba(79,209,255,0.85)"; ctx.fillRect(-BW/2, BL/2-18, BW, 2.5);
-  for (const s of [-1, 1]){
+  for (const s of staged ? [] : [-1, 1]){
     const fg2 = ctx.createLinearGradient(s*BW/2, 0, s*(BW/2+11), 0);
     fg2.addColorStop(0, "#3c4553"); fg2.addColorStop(1, "#232a35");
     ctx.fillStyle = fg2;
@@ -1411,8 +1497,8 @@ window.__ROCKET = {
     let n = Math.min(Math.round(sec/DT), 5e5);
     while (n-- > 0 && !S.done) physicsStep(DT);
     pushCharts(); updateReadouts();
-    return { t:S.t, h:S.h, v:S.v, mach:S.mach, Tn:S.Tn, prop:S.prop,
-             maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
+    return { t:S.t, h:S.h, v:S.v, mach:S.mach, Tn:S.Tn, prop:S.prop, prop2:S.prop2,
+             stage:S.stage, maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
   },
 };
 </script>
