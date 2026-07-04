@@ -51,6 +51,10 @@ Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat fl
 
 The Earth preset reproduces the US Standard Atmosphere closely (10 km: 223 K, 26.4 kPa, 0.413 kg/m³ vs the standard's 223.3 K, 26.5 kPa, 0.414 kg/m³).
 
+## Sound
+
+Fully procedural Web Audio (no samples) with a volume slider and mute button in the header. Engine roar is brown noise plus a 37 Hz sub-rumble scaled by throttle; aerodynamic wind is band-passed noise driven by dynamic pressure whose pitch rises with speed; heavy heating adds plasma crackle. One-shots: a double-crack sonic boom crossing Mach 1, staging thunk, parachute deploy whumps, touchdown thud, explosion boom. And because sound needs a medium, **it all fades with ambient pressure — in vacuum only a faint structure-borne engine rumble remains.** Volume and mute persist between sessions.
+
 ## Visuals
 
 The scene is rendered live on canvas: re-entry bow shock with a shape-dependent standoff distance, plasma envelope and incandescent wake, engine plumes that expand as ambient pressure drops (with shock diamonds in dense air), transonic vapour cone at Mach 1, pad steam and exhaust smoke particles, clouds and parallax star layers, sun that sharpens from a hazy disc to a hard point as you leave the air, a full launch complex (strongback, lightning masts, hangar, tank farm), camera shake at liftoff and max-q, parachute canopies with gores and inflation sway, and explosions with debris when things go wrong.
