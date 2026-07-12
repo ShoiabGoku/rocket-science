@@ -17,11 +17,11 @@ A single-file, zero-dependency web simulator of a rocket **ascending from** or *
 
 ## What you can configure
 
-- **Planet & gravity** — surface gravity g₀, planet radius (gravity falls off as inverse-square with altitude), or pick a preset: **Earth, Moon, Mars, Venus, Titan**
+- **Planet & gravity** — surface gravity g₀, planet radius (gravity falls off as inverse-square with altitude), **rotation period and launch latitude** (the planet's spin gives you free orbital speed — launch eastward near the equator), or pick a preset: **Earth, Moon, Mars, Venus, Titan**
 - **Atmosphere** — how far it extends (the air genuinely ends at your chosen edge), surface pressure & temperature, lapse rate, specific gas constant R, heat-capacity ratio γ
-- **Rocket** — dry mass, propellant mass, max thrust, body diameter, live throttle
+- **Rocket** — dry mass, propellant mass, max thrust, body diameter, live throttle, and a **structural G-limit** (exceed it and the airframe tears apart)
 - **Staging** — optional second stage with its own dry mass, propellant, thrust and fuel; booster burnout → jettison → stage-2 ignition sequence, with a live Tsiolkovsky ideal-Δv readout per stage
-- **Orbit guidance** — pitch-over altitude, gravity-turn end altitude, target orbit altitude, auto-circularize on/off, prograde/retro burn direction
+- **Orbit guidance** — pitch-over altitude, gravity-turn end altitude, target orbit altitude, auto-circularize on/off, prograde/retro burn direction, and a **re-entry lift vector** (LIFT ↑ / BALLISTIC / LIFT ↓) for controllable lifting entry
 - **Propellant** (sets sea-level & vacuum specific impulse):
   RP-1/LOX · LH₂/LOX · CH₄/LOX · N₂O₄/UDMH · APCP solid
 - **Nose shape** (sets the Mach-dependent drag curve *and* the stagnation-point radius):
@@ -30,7 +30,7 @@ A single-file, zero-dependency web simulator of a rocket **ascending from** or *
   Aluminium 2024 · Ti-6Al-4V · Stainless 310 · Inconel X-750 · Carbon-Carbon · **PICA ablative** (consumes ablator stock above 2900 K)
 - **Recovery system** — drogue + main parachute areas and main-deploy altitude. The drogue auto-deploys once falling below Mach 1.6 with q < 40 kPa; the main releases below your set altitude under 150 m/s. Works in both modes, so sounding rockets get recovered too.
 
-Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat flux, nose temperature vs material limit, effective Isp, TWR, local air ρ/P/T — plus strip-chart graphs and a time-stamped flight event log (LIFTOFF, MAX-Q, MECO, APOGEE, ENTRY INTERFACE, PEAK HEATING, TOUCHDOWN / CRASH / ESCAPE / VEHICLE LOST).
+Full telemetry: altitude, velocity, airspeed, Mach, felt g-load, **peak G**, dynamic pressure, heat flux, nose temperature vs material limit, effective Isp, TWR, apoapsis/periapsis, **Δv delivered and Δv losses (gravity/drag/steering)**, local air ρ/P/T — plus strip-chart graphs and a time-stamped flight event log (LIFTOFF, MAX-Q, MECO, APOGEE, ENTRY INTERFACE, PEAK HEATING, PLASMA BLACKOUT, TOUCHDOWN / CRASH / ESCAPE / VEHICLE LOST / AIRFRAME TORN APART).
 
 ## Physics models
 
@@ -45,7 +45,11 @@ Full telemetry: altitude, velocity, Mach, felt g-load, dynamic pressure, heat fl
 | Ablation | PICA holds ~2900 K while sacrificing ablator mass (q̇/h_abl); run out and the bare substrate fails fast |
 | Propulsion | Effective Isp blends vacuum ↔ sea-level values with ambient pressure; propellant drains at ṁ = F/(Isp·g₀); MECO when dry |
 | Parachutes | Drogue (C_d 0.9) and ringsail main (C_d 1.75) with timed inflation ramps that limit opening shock; deployment gated by Mach and dynamic pressure like real recovery sequencers |
-| Orbit mode | 2-D equations of motion in polar coordinates around the planet centre (central gravity μ/r², centrifugal and Coriolis terms); drag and heating use the full velocity vector; osculating elements (apoapsis/periapsis) from energy and angular momentum |
+| Orbit mode | 2-D equations of motion in polar coordinates around the planet centre (central gravity μ/r², centrifugal and Coriolis terms); osculating elements (apoapsis/periapsis) from energy and angular momentum |
+| Planetary rotation | The atmosphere co-rotates with the planet, so drag and heating feel **airspeed** (inertial velocity minus local rotation), while orbital dynamics use inertial velocity. Launching from a spinning planet gives free eastward velocity (ω·R·cos φ ≈ 465 m/s at Earth's equator) — the reason real spaceports sit near the equator and launch east |
+| Lift / L·D | Hypersonic lift acts perpendicular to the airflow with magnitude (L/D)·drag, steered up or down. Lifting entry flattens the trajectory to cap peak-G and heating (Apollo pulled ~7 g instead of a ballistic ~20 g) and extends downrange |
+| Δv budget | Delivered impulse ∫(F/m)dt, plus the classic loss accounting — gravity loss ∫g·sin γ dt, drag loss ∫(D/m)dt, and steering (cosine) loss from thrust-velocity misalignment |
+| Structural loads | Felt (non-gravitational) acceleration is tracked; exceed the airframe's G-limit and it breaks up. A straight-down ballistic entry is the steepest possible and pulls the most g |
 | Escape | Flags an escape trajectory when specific orbital energy v²/2 − μ/(R+h) ≥ 0 outside the atmosphere |
 | Integration | Semi-implicit Euler at 100 Hz with time-warp 0.5×–50×; physics on a wall-clock timer so background tabs don't freeze the flight |
 
@@ -66,9 +70,12 @@ The scene is rendered live on canvas: re-entry bow shock with a shape-dependent 
 3. **Capsule recovery** — 4 m spherical nose + PICA, no propellant at all: entry at 3 km/s → drogue at ~16 km → main at 2.5 km → 7.5 m/s splat-free touchdown, exactly like a real capsule sequence.
 4. **The full orbital mission** — TO ORBIT mode, two-stage on, spherical PICA nose: gravity turn → staging → 200 km orbit in ~19 min. Coast a while, flip RETRO, throttle up for ~10 s, and ride the plasma home to a parachute landing ~100 minutes after liftoff.
 5. **Why orbit is hard** — try the same mission with staging off, or with an aluminium nose, or with the gravity turn ending at 65 km instead of 110. Each fails a different way: not enough Δv, a melted nose, or drag losses eating the margin.
-3. **Moon hop** — Moon preset: no drag, no Max-Q, no heating, and a TWR of 12 on the same rocket. Escape velocity comes embarrassingly quickly.
-4. **Venus is hell** — 92 bar and 737 K at the surface. Watch what the atmosphere does to your ascent.
-5. **Throttle discipline** — full throttle from the pad melts an aluminium nose in the dense lower atmosphere; real rockets throttle down through Max-Q for a reason.
+6. **Why rockets launch east from the equator** — TO ORBIT mode, set launch latitude to 0° and watch the ~465 m/s of free eastward velocity you start with; then set it to 70° (like a polar launch site) and see how much more Δv you have to spend. The Δv-losses readout tells the story.
+7. **Lifting vs ballistic entry** — after reaching orbit, deorbit twice: once as BALLISTIC, once with LIFT ↑. Lift flattens the descent, cutting peak-G and nose temperature and stretching your downrange — exactly why Apollo flew a lifting entry instead of dropping straight in.
+8. **Tear it apart** — drop the structural G-limit to a crewed value (~12 g) and try a straight-down 4 km/s entry: the airframe rips apart under load long before it lands. Real steep entries are survivable only because of shallow, lifting flight paths.
+9. **Moon hop** — Moon preset: no drag, no Max-Q, no heating, and a TWR of 12 on the same rocket. Escape velocity comes embarrassingly quickly.
+10. **Venus is hell** — 92 bar and 737 K at the surface. Watch what the atmosphere does to your ascent.
+11. **Throttle discipline** — full throttle from the pad melts an aluminium nose in the dense lower atmosphere; real rockets throttle down through Max-Q for a reason.
 
 ## Controls
 

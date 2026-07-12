@@ -173,10 +173,17 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
     <details open id="orbitBox" style="display:none"><summary>ORBIT GUIDANCE</summary><div class="body">
       <label class="chk"><input type="checkbox" id="autoCirc" checked> Auto-circularize at apoapsis</label>
       <div id="grp-orbit"></div>
-      <div class="note">Gravity turn: vertical to pitch-over altitude, then pitch eases from 90°
-        to horizontal by turn-end altitude. MECO once apoapsis reaches target, coast, then a
-        prograde burn at apoapsis circularizes. Going orbital is HOT — pick a titanium,
-        carbon or PICA nose. After orbit: RETRO + throttle to deorbit and come home.</div>
+      <label style="display:block;font-size:11px;color:var(--dim);margin:8px 0 4px">Re-entry lift vector</label>
+      <div style="display:flex;gap:6px">
+        <button id="btnLiftUp" class="bdir">LIFT ↑</button>
+        <button id="btnLiftOff" class="bdir active">BALLISTIC</button>
+        <button id="btnLiftDown" class="bdir">LIFT ↓</button>
+      </div>
+      <div class="note">Gravity turn: vertical to pitch-over altitude, then pitch eases to horizontal
+        by turn-end altitude; MECO at target apoapsis, coast, prograde circularization burn.
+        <b>Lift vector</b> steers re-entry: LIFT ↑ flattens the descent (skip / extend range,
+        lower heating), LIFT ↓ steepens it. Only blunt/pointed noses generate useful lift.
+        Launch <b>eastward near the equator</b> and the planet's spin gives you free orbital speed.</div>
     </div></details>
 
     <details open><summary>NOSE &amp; THERMAL PROTECTION</summary><div class="body">
@@ -213,7 +220,9 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
       <div class="ro"><div class="l">VELOCITY</div><div class="v" id="roVel">0 m/s</div></div>
       <div class="ro"><div class="l">MACH</div><div class="v" id="roMach">0.00</div></div>
       <div class="ro"><div class="l">ACCEL (FELT)</div><div class="v" id="roAcc">0.0 g</div></div>
+      <div class="ro"><div class="l">PEAK G-LOAD</div><div class="v" id="roPeakG">0.0 g</div></div>
       <div class="ro"><div class="l">LOCAL GRAVITY</div><div class="v" id="roG">9.81 m/s²</div></div>
+      <div class="ro"><div class="l">AIRSPEED</div><div class="v" id="roAirspd">—</div></div>
       <div class="ro"><div class="l">THRUST</div><div class="v" id="roThrust">0 kN</div></div>
       <div class="ro"><div class="l">TWR</div><div class="v" id="roTwr">—</div></div>
       <div class="ro"><div class="l">DRAG</div><div class="v" id="roDrag">0 kN</div></div>
@@ -222,6 +231,8 @@ h3.sec{font-size:10px;color:var(--amber);letter-spacing:2px;margin:12px 0 6px}
       <div class="ro"><div class="l">APOGEE</div><div class="v" id="roApo">—</div></div>
       <div class="ro"><div class="l">APOAPSIS</div><div class="v" id="roApoapsis">—</div></div>
       <div class="ro"><div class="l">PERIAPSIS</div><div class="v" id="roPeriapsis">—</div></div>
+      <div class="ro"><div class="l">Δv DELIVERED</div><div class="v" id="roDv">0 m/s</div></div>
+      <div class="ro"><div class="l">Δv LOSSES</div><div class="v" id="roLoss">0 m/s</div></div>
       <div class="ro"><div class="l">AIR DENSITY</div><div class="v" id="roRho">1.225 kg/m³</div></div>
       <div class="ro"><div class="l">AIR PRESSURE</div><div class="v" id="roPair">101.3 kPa</div></div>
       <div class="ro"><div class="l">AIR TEMP</div><div class="v" id="roTair">288 K</div></div>
@@ -272,16 +283,16 @@ const FUELS = {
 };
 
 const NOSES = {
-  cone:   {name:"Conical (sharp)",  cd0:0.30, cdPeak:0.62, cdSup:0.26, rn:0.08,
-           info:"Low supersonic drag, tiny nose radius → severe stagnation heating."},
-  ogive:  {name:"Ogive (tangent)",  cd0:0.26, cdPeak:0.55, cdSup:0.22, rn:0.12,
+  cone:   {name:"Conical (sharp)",  cd0:0.30, cdPeak:0.62, cdSup:0.26, rn:0.08, ld:0.55,
+           info:"Low supersonic drag, tiny nose radius → severe stagnation heating. High L/D."},
+  ogive:  {name:"Ogive (tangent)",  cd0:0.26, cdPeak:0.55, cdSup:0.22, rn:0.12, ld:0.60,
            info:"Best all-round supersonic shape — most launch vehicles and missiles."},
-  para:   {name:"Parabolic",        cd0:0.28, cdPeak:0.58, cdSup:0.25, rn:0.18,
+  para:   {name:"Parabolic",        cd0:0.28, cdPeak:0.58, cdSup:0.25, rn:0.18, ld:0.45,
            info:"Smooth transonic behaviour, moderate heating."},
-  sphere: {name:"Spherical (blunt)",cd0:0.48, cdPeak:0.95, cdSup:0.85, rnFrac:0.5,
-           info:"High drag, but the detached bow shock keeps heat flux low (q̇ ∝ 1/√rₙ) — re-entry capsules."},
-  flat:   {name:"Flat face",        cd0:0.85, cdPeak:1.25, cdSup:1.15, rnFrac:0.9,
-           info:"Maximum drag brake. Largest effective nose radius → lowest heat flux, brutal deceleration."},
+  sphere: {name:"Spherical (blunt)",cd0:0.48, cdPeak:0.95, cdSup:0.85, rnFrac:0.5, ld:0.30,
+           info:"High drag, but the detached bow shock keeps heat flux low (q̇ ∝ 1/√rₙ) — re-entry capsules. Apollo-like L/D≈0.3."},
+  flat:   {name:"Flat face",        cd0:0.85, cdPeak:1.25, cdSup:1.15, rnFrac:0.9, ld:0.08,
+           info:"Maximum drag brake. Largest effective nose radius → lowest heat flux, brutal deceleration. Nearly ballistic."},
 };
 
 const MATERIALS = {
@@ -301,16 +312,18 @@ const MATERIALS = {
 };
 
 const PLANETS = {
-  earth:{g0:9.81, radius:6371, hatm:100, p0:101.3, t0:288, lapse:6.5, rs:287, gamma:1.40},
-  moon: {g0:1.62, radius:1737, hatm:0,   p0:0,     t0:250, lapse:0,   rs:287, gamma:1.40},
-  mars: {g0:3.71, radius:3390, hatm:80,  p0:0.61,  t0:210, lapse:2.5, rs:189, gamma:1.30},
-  venus:{g0:8.87, radius:6052, hatm:250, p0:9200,  t0:737, lapse:7.7, rs:188, gamma:1.29},
-  titan:{g0:1.35, radius:2575, hatm:600, p0:146.7, t0:94,  lapse:1.0, rs:290, gamma:1.40},
+  earth:{g0:9.81, radius:6371, hatm:100, p0:101.3, t0:288, lapse:6.5, rs:287, gamma:1.40, sidereal:23.93},
+  moon: {g0:1.62, radius:1737, hatm:0,   p0:0,     t0:250, lapse:0,   rs:287, gamma:1.40, sidereal:655.7},
+  mars: {g0:3.71, radius:3390, hatm:80,  p0:0.61,  t0:210, lapse:2.5, rs:189, gamma:1.30, sidereal:24.62},
+  venus:{g0:8.87, radius:6052, hatm:250, p0:9200,  t0:737, lapse:7.7, rs:188, gamma:1.29, sidereal:5832},
+  titan:{g0:1.35, radius:2575, hatm:600, p0:146.7, t0:94,  lapse:1.0, rs:290, gamma:1.40, sidereal:382.7},
 };
 
 const PARAM_DEFS = [
   {id:"g0",      g:"planet", label:"Surface gravity g₀", unit:"m/s²",   min:0.1, max:30,    step:0.01, val:9.81},
   {id:"radius",  g:"planet", label:"Planet radius",      unit:"km",     min:200, max:20000, step:10,   val:6371},
+  {id:"sidereal",g:"planet", label:"Rotation period",    unit:"h",      min:0,   max:9000,  step:0.1,  val:23.93},
+  {id:"latitude",g:"planet", label:"Launch latitude",    unit:"°",      min:-80, max:80,    step:1,    val:5},
   {id:"hatm",    g:"atmo",   label:"Atmosphere extent",  unit:"km",     min:0,   max:1000,  step:5,    val:100},
   {id:"p0",      g:"atmo",   label:"Surface pressure",   unit:"kPa",    min:0,   max:9500,  step:0.5,  val:101.3},
   {id:"t0",      g:"atmo",   label:"Surface temperature",unit:"K",      min:30,  max:800,   step:1,    val:288},
@@ -321,6 +334,7 @@ const PARAM_DEFS = [
   {id:"propmass",g:"rocket", label:"Propellant mass",    unit:"t",      min:0,   max:1000,  step:0.5,  val:10},
   {id:"thrust",  g:"rocket", label:"Max thrust",         unit:"kN",     min:0,   max:20000, step:10,   val:250},
   {id:"dia",     g:"rocket", label:"Body diameter",      unit:"m",      min:0.3, max:12,    step:0.1,  val:1.8},
+  {id:"glimit",  g:"rocket", label:"Structural G-limit", unit:"g",      min:3,   max:80,    step:1,    val:40},
   {id:"entryalt",g:"entry",  label:"Entry altitude",     unit:"km",     min:1,   max:2000,  step:1,    val:120},
   {id:"entryvel",g:"entry",  label:"Entry speed (down)", unit:"m/s",    min:0,   max:12000, step:50,   val:3000},
   {id:"s2drymass", g:"stage2",label:"S2 dry mass",       unit:"t",      min:0.05,max:100,   step:0.05, val:0.8},
@@ -495,7 +509,10 @@ function initState(){
     v: mode === "descent" ? -P.entryvel : 0,
     prop: P.propmass * 1000,
     stage:1, prop2: P.s2propmass * 1000, sepStarted:false, sepAt:0, ign2:false,
-    th:0, vt:0, speed: mode === "descent" ? P.entryvel : 0,
+    th:0,
+    vt: mode === "orbit" ? surfEastSpeed(0) : 0,     // share the planet's eastward spin on the pad
+    speed: mode === "descent" ? P.entryvel : (mode === "orbit" ? surfEastSpeed(0) : 0),
+    airspd:0, dvSpent:0, lossGrav:0, lossDrag:0, lossSteer:0, peakG:0,
     ang: mode === "descent" ? Math.PI : 0,
     ophase:"ascent", pitchLogged:false, deorbited:false, ra:0, rp:0,
     trail:[], lastTrail:-9, trailDt:2,
@@ -516,6 +533,16 @@ function initState(){
   updateReadouts();
 }
 function localG(h){ const Rm = P.radius*1000; return P.g0 * (Rm/(Rm+h))**2; }
+// Planet spin: angular rate (rad/s) and the eastward surface speed it gives at radius Rm+h.
+function omegaPlanet(){ return P.sidereal > 0 ? 2*Math.PI/(P.sidereal*3600) : 0; }
+function surfEastSpeed(h){ return omegaPlanet()*(P.radius*1000 + h)*Math.cos(P.latitude*Math.PI/180); }
+let liftCmd = 0;   // -1 lift toward planet (steepen), 0 off, +1 lift away (extend/skip)
+function setLift(d){
+  liftCmd = d;
+  $("btnLiftUp").classList.toggle("active", d > 0);
+  $("btnLiftOff").classList.toggle("active", d === 0);
+  $("btnLiftDown").classList.toggle("active", d < 0);
+}
 
 function physicsStep(dt){
   if (mode === "orbit"){ physicsStepOrbit(dt); return; }
@@ -606,6 +633,20 @@ function physicsStep(dt){
   if (S.h > S.maxH) S.maxH = S.h;
   if (!S.qWarned && qDyn > 80000){
     S.qWarned = true; log(`⚠ AIRFRAME STRESS — q ${(qDyn/1000).toFixed(0)} kPa`, "warn");
+  }
+  if (S.accFelt > S.peakG) S.peakG = S.accFelt;
+  // --- Δv budget (engineering accounting)
+  if (thrust > 0){
+    S.dvSpent += (thrust/m)*dt;
+    if (S.v >= 0) S.lossGrav += g*dt;                       // gravity loss while climbing
+    S.lossDrag += (Math.abs(Fd)/m)*dt;
+  }
+  // --- structural G-limit
+  if (S.accFelt > P.glimit && !S.failed && S.lifted){
+    S.failed = true; S.done = true; spawnExplosion(1.0);
+    log(`STRUCTURAL FAILURE — ${S.accFelt.toFixed(1)} g exceeds ${P.glimit} g limit`, "bad");
+    banner("bad", "⚠ AIRFRAME TORN APART", `${S.accFelt.toFixed(1)} g load exceeded the ${P.glimit} g structural limit`);
+    stopRun(); return;
   }
   if (Math.abs(S.v) > 2) S.orient = Math.sign(S.v);
   if (S.mainFrac > 0.4) S.orient = 1;                      // hangs upright under the main canopy
@@ -765,16 +806,21 @@ function physicsStepOrbit(dt){
     S.deorbited = true; log("DEORBIT BURN — retrograde", "warn");
   }
 
-  // --- aerodynamics: drag (and chutes) act along −velocity
-  S.mach = atm.rho > 0 ? spd0/soundSpeed(atm.T) : 0;
-  const qDyn = 0.5*atm.rho*spd0*spd0;
+  // --- air-relative velocity: the atmosphere co-rotates with the planet, so drag and
+  //     heating feel airspeed (inertial velocity minus local rotation speed), not inertial speed.
+  const omega = omegaPlanet();
+  const vAirT = S.vt - omega*r;
+  const airspd = Math.hypot(S.v, vAirT);
+  S.airspd = airspd;
+  S.mach = atm.rho > 0 ? airspd/soundSpeed(atm.T) : 0;
+  const qDyn = 0.5*atm.rho*airspd*airspd;
   let chuteCdA = 0;
   if ($("chutesOn").checked && S.v < 0 && atm.rho > 1e-4){
     if (S.chute === "stowed" && S.mach < 1.6 && qDyn < 40000 && P.chutedrogue > 0){
       S.chute = "drogue"; S.drogueT = S.t;
-      log(`DROGUE DEPLOY — ${spd0.toFixed(0)} m/s at ${fmtAlt(S.h)}`, "good");
+      log(`DROGUE DEPLOY — ${airspd.toFixed(0)} m/s at ${fmtAlt(S.h)}`, "good");
     }
-    if (S.chute === "drogue" && S.h < P.chutealt*1000 && spd0 < 150 && P.chutemain > 0){
+    if (S.chute === "drogue" && S.h < P.chutealt*1000 && airspd < 150 && P.chutemain > 0){
       S.chute = "main"; S.mainT = S.t; log(`MAIN CHUTE DEPLOY at ${fmtAlt(S.h)}`, "good");
     }
   }
@@ -789,11 +835,18 @@ function physicsStepOrbit(dt){
   }
   const Cd = dragCoeff(nose, S.mach);
   const Faero = qDyn*(Cd*area + chuteCdA);
-  const uR = spd0 > 1e-6 ? S.v/spd0 : 0, uT = spd0 > 1e-6 ? S.vt/spd0 : 0;
+  const uR = airspd > 1e-6 ? S.v/airspd : 0, uT = airspd > 1e-6 ? vAirT/airspd : 0;
+  // hypersonic lift: perpendicular to the airflow, magnitude L/D × drag, steered by liftCmd.
+  // Disabled once any chute is out (a canopy dominates the aerodynamics).
+  const ldRaw = (nose.ld || 0) * (S.chute === "stowed" ? 1 : 0);
+  const Flift = (liftCmd !== 0 && atm.rho > 0) ? qDyn*ldRaw*Cd*area*liftCmd : 0;
+  const pR = uT, pT = -uR;          // 90° from airflow; +liftCmd pushes away from the planet
 
   // --- integrate polar equations of motion (semi-implicit)
-  const aR = -mu/(r*r) + S.vt*S.vt/r + (thrust*dR - Faero*uR)/m;
-  const aT = -(S.v*S.vt)/r + (thrust*dT - Faero*uT)/m;
+  const fR = thrust*dR - Faero*uR + Flift*pR;    // non-gravitational radial force
+  const fT = thrust*dT - Faero*uT + Flift*pT;    // non-gravitational tangential force
+  const aR = -mu/(r*r) + S.vt*S.vt/r + fR/m;
+  const aT = -(S.v*S.vt)/r + fT/m;
   S.v  += aR*dt;
   S.vt += aT*dt;
   S.h  += S.v*dt;
@@ -801,12 +854,29 @@ function physicsStepOrbit(dt){
   S.t  += dt;
   S.speed = Math.hypot(S.v, S.vt);
   S.thrustNow = thrust; S.dragNow = Faero;
-  S.accFelt = Math.hypot(thrust*dR - Faero*uR, thrust*dT - Faero*uT)/m/G_STD;
+  S.accFelt = Math.hypot(fR, fT)/m/G_STD;         // felt g = non-gravitational accel only
   S.qNow = qDyn; S.gNow = g; S.atm = atm;
   if (qDyn > S.maxQ) S.maxQ = qDyn;
   if (S.h > S.maxH) S.maxH = S.h;
+  if (S.accFelt > S.peakG) S.peakG = S.accFelt;
   if (!S.qWarned && qDyn > 80000){
     S.qWarned = true; log(`⚠ AIRFRAME STRESS — q ${(qDyn/1000).toFixed(0)} kPa`, "warn");
+  }
+  // --- Δv budget: impulse delivered, and where the energy is lost (engineering accounting)
+  if (thrust > 0){
+    const spInert = Math.max(S.speed, 1);
+    S.dvSpent  += (thrust/m)*dt;
+    S.lossGrav += g*(S.v/spInert)*dt;                        // gravity loss ∝ sin(flight-path angle)
+    const cosSteer = (dR*S.v + dT*S.vt)/spInert;            // thrust vs velocity misalignment
+    S.lossSteer += (thrust/m)*(1 - Math.max(cosSteer,0))*dt;
+  }
+  if (thrust > 0 && S.ophase === "ascent") S.lossDrag += (Faero/m)*dt;
+  // --- structural G-limit: too much load and the airframe tears apart
+  if (S.accFelt > P.glimit && !S.failed && S.lifted){
+    S.failed = true; S.done = true; spawnExplosion(1.0);
+    log(`STRUCTURAL FAILURE — ${S.accFelt.toFixed(1)} g exceeds ${P.glimit} g limit`, "bad");
+    banner("bad", "⚠ AIRFRAME TORN APART", `${S.accFelt.toFixed(1)} g load exceeded the ${P.glimit} g structural limit`);
+    stopRun(); return;
   }
 
   // --- sprite attitude: along thrust in the turn, else prograde (retro burns flip it)
@@ -931,16 +1001,18 @@ function physicsStepOrbit(dt){
     stopRun(); return;
   }
   if (S.h <= 0 && S.v <= 0 && S.lifted){
-    const vImp = S.speed;
+    // impact speed and downrange are GROUND-relative (subtract the planet's rotation)
+    const vImp = S.airspd;
+    const downKm = Math.abs(S.th - omega*S.t)*Rm/1000;
     S.h = 0; S.done = true;
     if (vImp <= 10){
       spawnDust();
       log(`TOUCHDOWN at ${vImp.toFixed(1)} m/s — SOFT LANDING${S.mainFrac >= 1 ? " under canopy" : ""}`, "good");
-      banner("good", "✓ SOFT LANDING", `touchdown ${vImp.toFixed(1)} m/s · ${(Math.abs(S.th)*Rm/1000).toFixed(0)} km downrange · nose peaked ${Math.round(S.TnPeak||S.Tn)} K`);
+      banner("good", "✓ SOFT LANDING", `touchdown ${vImp.toFixed(1)} m/s · ${downKm.toFixed(0)} km downrange · nose peaked ${Math.round(S.TnPeak||S.Tn)} K`);
     } else {
       spawnExplosion(1.2);
       log(`IMPACT at ${vImp.toFixed(0)} m/s — vehicle destroyed`, "bad");
-      banner("bad", "💥 CRASH", `impact at ${vImp.toFixed(0)} m/s, ${(Math.abs(S.th)*Rm/1000).toFixed(0)} km downrange`);
+      banner("bad", "💥 CRASH", `impact at ${vImp.toFixed(0)} m/s, ${downKm.toFixed(0)} km downrange`);
     }
     stopRun();
   }
@@ -997,6 +1069,7 @@ function resetRun(){
   particles.length = 0;
   shake = 0;
   setBurnDir(1);
+  setLift(0);
   initState();
 }
 function setMode(m){
@@ -1055,6 +1128,10 @@ function updateReadouts(){
   $("roMach").textContent = S.atm.rho > 0 ? S.mach.toFixed(2) : "— (vacuum)";
   $("roAcc").textContent  = S.accFelt.toFixed(2) + " g";
   $("roAcc").className    = "v" + (S.accFelt > 8 ? " bad" : S.accFelt > 4 ? " warn" : "");
+  $("roPeakG").textContent = (S.peakG||0).toFixed(2) + " g";
+  $("roPeakG").className   = "v" + ((S.peakG||0) > P.glimit*0.8 ? " bad" : (S.peakG||0) > 8 ? " warn" : "");
+  $("roAirspd").textContent = mode === "orbit"
+    ? (S.atm.rho > 0 ? (S.airspd||0).toFixed(0)+" m/s" : "— (vacuum)") : "—";
   $("roG").textContent    = S.gNow.toFixed(3) + " m/s²";
   $("roThrust").textContent = (S.thrustNow/1000).toFixed(0) + " kN";
   const st2onR = $("stagingOn").checked && mode !== "descent";
@@ -1074,6 +1151,9 @@ function updateReadouts(){
     $("roApoapsis").textContent = "—";
     $("roPeriapsis").textContent = "—";
   }
+  $("roDv").textContent = (S.dvSpent||0) > 0 ? (S.dvSpent||0).toFixed(0)+" m/s" : "—";
+  const loss = (S.lossGrav||0)+(S.lossDrag||0)+(S.lossSteer||0);
+  $("roLoss").textContent = loss > 0 ? loss.toFixed(0)+" m/s" : "—";
   $("roRho").textContent  = S.atm.rho > 0.001 ? S.atm.rho.toFixed(3)+" kg/m³"
                           : S.atm.rho > 0 ? S.atm.rho.toExponential(2)+" kg/m³" : "0 (vacuum)";
   $("roPair").textContent = S.atm.P > 100 ? (S.atm.P/1000).toFixed(1)+" kPa"
@@ -1730,7 +1810,7 @@ function drawHud(W, H){
   let hy = S.atm.rho > 0 ? 88 : 72;
   if (mode === "orbit"){
     ctx.fillStyle = "rgba(79,209,255,0.85)";
-    ctx.fillText(`DOWNRANGE ${(Math.abs(S.th||0)*P.radius).toFixed(0)} km`, 10, hy); hy += 16;
+    ctx.fillText(`DOWNRANGE ${(Math.abs((S.th||0) - omegaPlanet()*S.t)*P.radius).toFixed(0)} km`, 10, hy); hy += 16;
     ctx.fillText(`PHASE: ${(S.ophase||"").toUpperCase()}`, 10, hy); hy += 16;
     drawOrbitMap(W, H);
   }
@@ -1987,6 +2067,9 @@ $("tabDescent").addEventListener("click", () => setMode("descent"));
 $("tabOrbit").addEventListener("click", () => setMode("orbit"));
 $("btnPro").addEventListener("click", () => setBurnDir(1));
 $("btnRetro").addEventListener("click", () => setBurnDir(-1));
+$("btnLiftUp").addEventListener("click", () => setLift(1));
+$("btnLiftOff").addEventListener("click", () => setLift(0));
+$("btnLiftDown").addEventListener("click", () => setLift(-1));
 // sound controls (persisted); AudioContext needs a user gesture to start
 try {
   const v = parseFloat(localStorage.getItem("rfl_vol"));
@@ -2025,7 +2108,8 @@ requestAnimationFrame(frame);
 window.__ROCKET = {
   get S(){ return S }, get P(){ return P }, get mode(){ return mode },
   get running(){ return running }, get atmo(){ return ATMO },
-  start: startRun, reset: resetRun, setMode, atmoAt, setBurnDir, forceThrottle,
+  start: startRun, reset: resetRun, setMode, atmoAt, setBurnDir, setLift, forceThrottle,
+  get surfEast(){ return surfEastSpeed(0) },
   get sfx(){ return {ok:SFX.ok, failed:SFX.failed, muted:SFX.muted, vol:SFX.vol,
                      state:SFX.ok ? SFX.ctx.state : "none", dbg:SFX.dbg} },
   initAudio: sfxInit,
@@ -2035,9 +2119,11 @@ window.__ROCKET = {
     let n = Math.min(Math.round(sec/DT), 5e5);
     while (n-- > 0 && !S.done) physicsStep(DT);
     pushCharts(); updateReadouts();
-    return { t:S.t, h:S.h, v:S.v, vt:S.vt, speed:S.speed, mach:S.mach, Tn:S.Tn,
+    return { t:S.t, h:S.h, v:S.v, vt:S.vt, speed:S.speed, airspd:S.airspd, mach:S.mach, Tn:S.Tn,
              prop:S.prop, prop2:S.prop2, stage:S.stage, ophase:S.ophase, ra:S.ra, rp:S.rp,
-             th:S.th, maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, done:S.done, failed:S.failed };
+             th:S.th, maxH:S.maxH, maxQ:S.maxQ, maxQd:S.maxQd, peakG:S.peakG,
+             dvSpent:S.dvSpent, lossGrav:S.lossGrav, lossDrag:S.lossDrag, lossSteer:S.lossSteer,
+             done:S.done, failed:S.failed };
   },
 };
 </script>

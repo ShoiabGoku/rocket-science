@@ -585,6 +585,88 @@ This is genuine orbital-mechanics bookkeeping: from just your current speed and 
 
 ---
 
+## 8½. Advanced flight dynamics
+
+These four features layer real spaceflight-engineering detail on top of the orbit model. Each is a small amount of code with a big physical meaning.
+
+### 8½.1 Planetary rotation and launch latitude
+
+```js
+function omegaPlanet(){ return P.sidereal > 0 ? 2*Math.PI/(P.sidereal*3600) : 0; }
+function surfEastSpeed(h){ return omegaPlanet()*(P.radius*1000 + h)*Math.cos(P.latitude*Math.PI/180); }
+```
+
+A spinning planet carries everything on its surface eastward. `omegaPlanet()` converts the rotation *period* you set (hours per turn) into an *angular rate* (radians per second) — `2π` radians is one full turn, divided by the period in seconds. `surfEastSpeed()` then turns that spin rate into an actual eastward speed at your location: faster the bigger the planet (`P.radius`), and largest at the equator, shrinking to zero at the poles via `cos(latitude)` (the `*Math.PI/180` just converts degrees to the radians the trig functions expect).
+
+On Earth's equator this is about **465 m/s of free velocity** you already have before the engine even lights. In orbit mode, `initState` seeds the rocket's sideways velocity with it:
+
+```js
+vt: mode === "orbit" ? surfEastSpeed(0) : 0,   // share the planet's eastward spin on the pad
+```
+
+This is why real launch sites cluster near the equator (Kourou, Cape Canaveral, Sriharikota) and launch *eastward* — the planet hands you a big chunk of orbital speed for free. Try setting latitude to 0° versus 70° and watch how much more Δv you have to spend from the high latitude.
+
+There's a subtle, genuinely advanced consequence the code handles carefully: **the air rotates with the planet too.** So aerodynamic drag and heating should respond to your speed *relative to the moving air* (airspeed), not your speed relative to the fixed stars (inertial speed):
+
+```js
+const omega = omegaPlanet();
+const vAirT = S.vt - omega*r;              // subtract the local air's eastward motion
+const airspd = Math.hypot(S.v, vAirT);     // speed relative to the co-rotating atmosphere
+```
+
+The orbital *dynamics* (gravity, the shape of your orbit) use the inertial velocity, but everything *aerodynamic* — Mach number, dynamic pressure, drag, heating, and the touchdown speed — uses `airspd`. Without this split, a capsule drifting down under its parachute would look like it's moving at 465 m/s (its inertial speed, because it's still turning with the planet) when in reality it's touching down gently at walking pace relative to the ground.
+
+### 8½.2 Lift and the L/D ratio — steering a re-entry
+
+```js
+const ldRaw = (nose.ld || 0) * (S.chute === "stowed" ? 1 : 0);
+const Flift = (liftCmd !== 0 && atm.rho > 0) ? qDyn*ldRaw*Cd*area*liftCmd : 0;
+const pR = uT, pT = -uR;          // 90° from the airflow; +liftCmd pushes away from the planet
+```
+
+A re-entry vehicle isn't just a falling rock — by flying at a slight angle it generates **lift**, a force sideways to its motion, and it can point that lift up or down. Each nose shape carries an `ld` number (its lift-to-drag ratio, from the `NOSES` table): a blunt Apollo-style capsule has L/D ≈ 0.3, a sharp cone more. `Flift` is the lift force — proportional to that L/D times the drag — and `liftCmd` (set by the **LIFT ↑ / BALLISTIC / LIFT ↓** buttons, values +1 / 0 / −1) chooses which way it points. `(pR, pT)` is the direction 90° away from the airflow (basic geometry: rotate the velocity direction a quarter turn).
+
+Why it matters: pointing lift *up* (LIFT ↑) flattens your descent, so you slow down higher in thinner air. That **caps the peak deceleration and peak heating** and stretches your landing footprint downrange. In testing, switching a re-entry from ballistic to lift-up dropped the peak load from ~8 g to ~7 g and the nose temperature by hundreds of degrees. This is exactly why Apollo flew a lifting entry (holding ~6–7 g) instead of dropping straight in (which would pull ~20 g). Note the `S.chute === "stowed"` factor — once a parachute is out, the canopy dominates and body lift is switched off.
+
+### 8½.3 The Δv budget — where a rocket's energy goes
+
+```js
+if (thrust > 0){
+  const spInert = Math.max(S.speed, 1);
+  S.dvSpent  += (thrust/m)*dt;
+  S.lossGrav += g*(S.v/spInert)*dt;                       // gravity loss ∝ sin(flight-path angle)
+  const cosSteer = (dR*S.v + dT*S.vt)/spInert;            // thrust vs velocity misalignment
+  S.lossSteer += (thrust/m)*(1 - Math.max(cosSteer,0))*dt;
+}
+if (thrust > 0 && S.ophase === "ascent") S.lossDrag += (Faero/m)*dt;
+```
+
+Reaching orbit takes far more Δv (change in velocity) than the orbital speed alone, because a lot of your engine's effort is "wasted" fighting three things — and this block tallies each, integrating it up over the whole flight (`+= ... *dt` means "keep adding this tiny slice every time-step"):
+
+- **`dvSpent`** — the total velocity change your engine actually delivered (thrust ÷ mass, summed over time). This is the real "cost" of the flight.
+- **`lossGrav`** (gravity loss) — velocity lost to holding yourself up against gravity while climbing. It scales with `S.v/speed`, which is the sine of your flight-path angle: straight up loses the most, horizontal loses none.
+- **`lossSteer`** (steering loss) — when your thrust doesn't point exactly along your direction of travel, the sideways component is wasted. `cosSteer` measures the alignment; `1 - cosSteer` is the waste.
+- **`lossDrag`** (drag loss) — velocity eaten by air resistance during the climb.
+
+For a typical Earth launch to orbit the simulator reports roughly 9,700 m/s delivered against ~7,800 m/s of orbital speed, with about 1,100 m/s lost to gravity, 200 to drag, and 1,000 to steering — numbers that line up with real launch-vehicle engineering. The telemetry panel shows "Δv DELIVERED" and "Δv LOSSES" live, so you can *see* the cost of a too-steep or too-shallow gravity turn.
+
+### 8½.4 Structural G-limits — pulling too hard
+
+```js
+if (S.accFelt > S.peakG) S.peakG = S.accFelt;
+...
+if (S.accFelt > P.glimit && !S.failed && S.lifted){
+  S.failed = true; S.done = true; spawnExplosion(1.0);
+  log(`STRUCTURAL FAILURE — ${S.accFelt.toFixed(1)} g exceeds ${P.glimit} g limit`, "bad");
+  banner("bad", "⚠ AIRFRAME TORN APART", ...);
+  stopRun(); return;
+}
+```
+
+`S.accFelt` is the **felt** acceleration — the g-force from thrust, drag, and lift only, *not* gravity (you don't feel gravity in free-fall, which is why astronauts float). `S.peakG` remembers the worst load of the flight for the telemetry panel. If that load ever exceeds your set structural G-limit, the airframe tears apart. A straight-down ballistic entry is the steepest possible path and pulls the most g — try dropping the limit to a crewed value (~12 g) and entering fast and steep, and you'll rip the vehicle apart before it lands. The lesson is real: steep entries are only survivable because vehicles fly *shallow, lifting* paths (§8½.2) that spread the deceleration out.
+
+---
+
 ## 9. The parachute system
 
 ```js
@@ -775,6 +857,10 @@ That's the whole pipeline, for any of the roughly 20 sliders in the app: **HTML 
 | **Stagnation heating / heat flux (q̇)** | How much heat energy hits the nose per second per square metre. |
 | **Apoapsis / periapsis** | The highest and lowest points of an orbit. |
 | **Gravity turn** | The real-world technique of gradually tilting a rocket from vertical to horizontal during ascent. |
+| **Airspeed vs inertial speed** | Airspeed is your speed relative to the (co-rotating) air; inertial speed is relative to the fixed stars. Aerodynamics feels airspeed; orbits use inertial speed. |
+| **L/D (lift-to-drag ratio)** | How much sideways lift a shape makes for a given amount of drag. Higher L/D = more ability to steer and flatten a re-entry. |
+| **Δv (delta-v)** | Change in velocity — the fundamental "currency" of spaceflight. Reaching orbit costs far more Δv than orbital speed alone, because of gravity, drag, and steering losses. |
+| **Felt / proper acceleration** | The g-force you'd actually feel — from thrust, drag, and lift, but *not* gravity (free-fall feels weightless). |
 | **MECO / SECO** | "Main/Second Engine Cut-Off" — standard spaceflight terms for when a stage's engine stops firing. |
 | **Ablative heat shield** | A material designed to deliberately burn/flake away, carrying heat with it. |
 | **State machine** | Code that tracks "which named phase am I in right now" and moves between phases based on conditions — used for staging, chute deployment, and orbit guidance in this app. |
